@@ -14,26 +14,12 @@ export default function BookingPage() {
   const t = therapists.find(th => th.id === Number(id)) || therapists[0];
   const [selectedDate, setSelectedDate] = useState(null);
   const [selectedTime, setSelectedTime] = useState(null);
-  const [confirmed, setConfirmed] = useState(false);
 
-  if (confirmed) {
-    return (
-      <DashboardLayout sidebarItems={clientSidebarItems} userName="Yordanos T.">
-        <div className="max-w-md mx-auto text-center py-16">
-          <div className="w-16 h-16 bg-teal-50 rounded-full flex items-center justify-center mx-auto mb-4">
-            <CheckCircle size={32} className="text-teal-500" />
-          </div>
-          <h2 className="text-xl font-bold text-slate-800 mb-2">Session Booked!</h2>
-          <p className="text-gray-500 text-sm mb-1">Your session with <strong>{t.name}</strong> is confirmed.</p>
-          <p className="text-gray-500 text-sm mb-6">{selectedDate} at {selectedTime}</p>
-          <div className="flex gap-3 justify-center">
-            <button onClick={() => navigate('/client/sessions')} className="bg-primary text-white px-5 py-2.5 rounded-xl text-sm font-semibold hover:bg-blue-600 transition">View Appointments</button>
-            <button onClick={() => navigate('/client/dashboard')} className="border border-gray-200 text-gray-600 px-5 py-2.5 rounded-xl text-sm hover:bg-gray-50 transition">Go to Dashboard</button>
-          </div>
-        </div>
-      </DashboardLayout>
-    );
-  }
+  const handleProceed = () => {
+    navigate('/client/payment/checkout', {
+      state: { therapistId: t.id, date: selectedDate, time: selectedTime }
+    });
+  };
 
   return (
     <DashboardLayout sidebarItems={clientSidebarItems} userName="Yordanos T.">
@@ -77,7 +63,7 @@ export default function BookingPage() {
           </div>
         )}
 
-        {/* Confirm */}
+        {/* Summary + Proceed to Payment */}
         {selectedDate && selectedTime && (
           <div className="bg-blue-50 rounded-2xl border border-blue-100 p-5">
             <h2 className="font-semibold text-slate-800 mb-3">Booking Summary</h2>
@@ -85,9 +71,15 @@ export default function BookingPage() {
               <div className="flex justify-between"><span className="text-gray-500">Therapist</span><span className="font-medium">{t.name}</span></div>
               <div className="flex justify-between"><span className="text-gray-500">Date</span><span className="font-medium">{selectedDate}</span></div>
               <div className="flex justify-between"><span className="text-gray-500">Time</span><span className="font-medium">{selectedTime}</span></div>
-              <div className="flex justify-between"><span className="text-gray-500">Fee</span><span className="font-medium text-primary">ETB {t.price}</span></div>
+              <div className="flex justify-between pt-2 border-t border-blue-100">
+                <span className="font-semibold text-slate-800">Consultation Fee</span>
+                <span className="font-bold text-primary">ETB {t.price}</span>
+              </div>
             </div>
-            <button onClick={() => setConfirmed(true)} className="w-full bg-primary text-white py-3 rounded-xl font-semibold hover:bg-blue-600 transition">Confirm & Pay</button>
+            <button onClick={handleProceed}
+              className="w-full bg-primary text-white py-3 rounded-xl font-semibold hover:bg-blue-600 transition flex items-center justify-center gap-2">
+              <CheckCircle size={16} /> Proceed to Payment
+            </button>
           </div>
         )}
       </div>
