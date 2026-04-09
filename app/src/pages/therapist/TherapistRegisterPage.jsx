@@ -1,4 +1,8 @@
-import { useState } from 'react';
+{step < steps.length - 1 ? (
+  <button onClick={() => setStep(step + 1)} className="bg-primary text-white px-5 py-2.5 rounded-xl text-sm font-semibold hover:bg-blue-600 transition">Continue →</button>
+) : (
+  <button onClick={handleSubmit} className="bg-teal-500 text-white px-6 py-2.5 rounded-xl text-sm font-semibold hover:bg-teal-600 transition">Submit for System Verification</button>
+)}import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Heart, Upload, CheckCircle, XCircle, AlertTriangle, Clock } from 'lucide-react';
 
