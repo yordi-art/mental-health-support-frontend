@@ -7,6 +7,7 @@ const navLinks = [
   { label: 'About', to: '/about' },
   { label: 'How It Works', to: '/how-it-works' },
   { label: 'Find Therapist', to: '/therapists' },
+  { label: 'Contact', to: '/contact' },
   { label: 'FAQ', to: '/faq' },
 ];
 

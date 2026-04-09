@@ -1,91 +1,68 @@
 import { Link } from 'react-router-dom';
-import { TrendingUp, AlertCircle, CheckCircle, ArrowRight, RotateCcw } from 'lucide-react';
+import { TrendingUp, CheckCircle, AlertCircle, Info } from 'lucide-react';
 import DashboardLayout from '../../layouts/DashboardLayout';
+import PageHeader from '../../components/common/PageHeader';
+import StatusBadge from '../../components/common/StatusBadge';
 import { clientSidebarItems } from '../../components/client/clientNav';
 import { assessmentResults } from '../../data/sampleData';
 
-const categoryConfig = {
-  'Minimal': { color: 'text-green-600', bg: 'bg-green-50', border: 'border-green-200', icon: CheckCircle, desc: 'Your symptoms are minimal. Keep up your self-care routines.' },
-  'Mild Depression': { color: 'text-yellow-600', bg: 'bg-yellow-50', border: 'border-yellow-200', icon: TrendingUp, desc: 'Mild symptoms detected. Self-care and monitoring are recommended.' },
-  'Mild Anxiety': { color: 'text-yellow-600', bg: 'bg-yellow-50', border: 'border-yellow-200', icon: TrendingUp, desc: 'Mild anxiety symptoms. Mindfulness and breathing exercises can help.' },
-  'Moderate Depression': { color: 'text-orange-600', bg: 'bg-orange-50', border: 'border-orange-200', icon: AlertCircle, desc: 'Moderate symptoms. Speaking with a therapist is strongly recommended.' },
-  'Moderate Anxiety': { color: 'text-orange-600', bg: 'bg-orange-50', border: 'border-orange-200', icon: AlertCircle, desc: 'Moderate anxiety. A therapist can help you develop coping strategies.' },
-  'Severe': { color: 'text-red-600', bg: 'bg-red-50', border: 'border-red-200', icon: AlertCircle, desc: 'Significant symptoms detected. Please reach out to a professional soon.' },
+const categoryColor = {
+  'Minimal': 'text-green-600 bg-green-50',
+  'Mild': 'text-yellow-600 bg-yellow-50',
+  'Moderate': 'text-orange-600 bg-orange-50',
+  'Moderately Severe': 'text-red-500 bg-red-50',
+  'Severe': 'text-red-700 bg-red-100',
 };
 
-const maxScore = { 'PHQ-9': 27, 'GAD-7': 21 };
+const categoryIcon = {
+  'Minimal': CheckCircle,
+  'Mild': Info,
+  'Moderate': AlertCircle,
+  'Moderately Severe': AlertCircle,
+  'Severe': AlertCircle,
+};
 
 export default function AssessmentResultPage() {
-  const latest = assessmentResults[0];
-  const cfg = categoryConfig[latest.category] || categoryConfig['Mild Depression'];
-  const Icon = cfg.icon;
-  const pct = Math.round((latest.score / maxScore[latest.type]) * 100);
-
   return (
     <DashboardLayout sidebarItems={clientSidebarItems} userName="Yordanos T.">
-      <div className="max-w-2xl mx-auto">
-        <h1 className="text-xl font-semibold text-slate-800 mb-1">Your Assessment Result</h1>
-        <p className="text-sm text-gray-500 mb-6">Here's a summary of your latest mental health check-in.</p>
+      <PageHeader title="My Assessment Results" description="Your mental health screening history and insights" />
 
-        {/* Result Card */}
-        <div className={`rounded-2xl border p-6 mb-5 ${cfg.bg} ${cfg.border}`}>
-          <div className="flex items-center gap-4 mb-4">
-            <div className={`w-16 h-16 rounded-2xl bg-white flex flex-col items-center justify-center shadow-sm`}>
-              <span className={`text-2xl font-bold ${cfg.color}`}>{latest.score}</span>
-              <span className="text-xs text-gray-400">/ {maxScore[latest.type]}</span>
-            </div>
-            <div>
-              <p className="text-xs text-gray-500 mb-0.5">{latest.type} · {latest.date}</p>
-              <h2 className={`text-xl font-bold ${cfg.color}`}>{latest.category}</h2>
-              <div className="flex items-center gap-1 mt-1">
-                <Icon size={14} className={cfg.color} />
-                <span className="text-xs text-gray-600">{cfg.desc}</span>
+      <div className="space-y-5 max-w-3xl">
+        {assessmentResults.map(r => {
+          const Icon = categoryIcon[r.category] || Info;
+          const colorCls = categoryColor[r.category] || 'text-gray-600 bg-gray-50';
+          return (
+            <div key={r.id} className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
+              <div className="flex items-start gap-4">
+                <div className={`w-16 h-16 rounded-2xl flex flex-col items-center justify-center flex-shrink-0 ${colorCls}`}>
+                  <span className="text-2xl font-bold">{r.score}</span>
+                  <span className="text-xs">/ {r.type === 'PHQ-9' ? '27' : '21'}</span>
+                </div>
+                <div className="flex-1">
+                  <div className="flex items-center gap-2 mb-1 flex-wrap">
+                    <h3 className="font-semibold text-slate-800">{r.type}</h3>
+                    <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${colorCls}`}>{r.category}</span>
+                  </div>
+                  <p className="text-xs text-gray-400 mb-2">Taken on {r.date}</p>
+                  <p className="text-sm text-gray-600">{r.recommendation}</p>
+                </div>
+                <Icon size={20} className={colorCls.split(' ')[0]} />
+              </div>
+              <div className="mt-4 flex gap-2">
+                <Link to="/client/therapists" className="text-xs bg-primary text-white px-4 py-2 rounded-xl hover:bg-blue-600 transition">Find Therapist</Link>
+                <Link to="/client/assessment" className="text-xs border border-gray-200 text-gray-600 px-4 py-2 rounded-xl hover:bg-gray-50 transition">Retake Assessment</Link>
               </div>
             </div>
-          </div>
-          {/* Score bar */}
-          <div className="mb-1 flex justify-between text-xs text-gray-500">
-            <span>Score progress</span><span>{pct}%</span>
-          </div>
-          <div className="w-full h-2 bg-white rounded-full overflow-hidden">
-            <div className={`h-full rounded-full transition-all ${pct < 40 ? 'bg-green-400' : pct < 65 ? 'bg-yellow-400' : 'bg-red-400'}`} style={{ width: `${pct}%` }} />
-          </div>
-        </div>
+          );
+        })}
 
-        {/* Recommendation */}
-        <div className="bg-white rounded-2xl border border-gray-100 p-5 mb-5 shadow-sm">
-          <h3 className="font-semibold text-slate-800 mb-2">What this means for you</h3>
-          <p className="text-sm text-gray-600 mb-4">{latest.recommendation}</p>
-          <div className="flex flex-col sm:flex-row gap-3">
-            <Link to="/client/therapists" className="flex-1 flex items-center justify-center gap-2 bg-primary text-white py-2.5 rounded-xl text-sm font-semibold hover:bg-blue-600 transition">
-              Find a Therapist <ArrowRight size={15} />
-            </Link>
-            <Link to="/client/assessment" className="flex-1 flex items-center justify-center gap-2 border border-gray-200 text-gray-600 py-2.5 rounded-xl text-sm hover:bg-gray-50 transition">
-              <RotateCcw size={15} /> Retake Assessment
-            </Link>
+        {/* Progress Note */}
+        <div className="bg-blue-50 rounded-2xl p-5 border border-blue-100">
+          <div className="flex items-center gap-2 mb-2">
+            <TrendingUp size={16} className="text-primary" />
+            <h3 className="font-semibold text-slate-800 text-sm">Your Wellness Trend</h3>
           </div>
-        </div>
-
-        {/* History */}
-        <div className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm">
-          <h3 className="font-semibold text-slate-800 mb-4">Assessment History</h3>
-          <div className="space-y-3">
-            {assessmentResults.map(r => {
-              const c = categoryConfig[r.category] || categoryConfig['Mild Depression'];
-              return (
-                <div key={r.id} className="flex items-center gap-3 p-3 rounded-xl border border-gray-50 hover:bg-gray-50 transition">
-                  <div className={`w-10 h-10 rounded-xl ${c.bg} flex items-center justify-center`}>
-                    <span className={`text-sm font-bold ${c.color}`}>{r.score}</span>
-                  </div>
-                  <div className="flex-1">
-                    <p className="text-sm font-medium text-slate-700">{r.type} — {r.category}</p>
-                    <p className="text-xs text-gray-400">{r.date}</p>
-                  </div>
-                  <span className={`text-xs px-2 py-0.5 rounded-full ${c.bg} ${c.color}`}>{r.category}</span>
-                </div>
-              );
-            })}
-          </div>
+          <p className="text-sm text-gray-600">Your PHQ-9 score improved from <strong>11 (Moderate)</strong> in February to <strong>7 (Mild)</strong> in March. Keep up the great work! 🌱</p>
         </div>
       </div>
     </DashboardLayout>
