@@ -1,110 +1,207 @@
 const Therapist = require('../models/Therapist');
 
+/**
+ * Therapist License Verification Service
+ * 
+ * This system performs preliminary digital verification and does not replace 
+ * official licensing by the Ministry of Health or regulatory authorities in Ethiopia.
+ * 
+ * Verification Status:
+ * - VERIFIED: All criteria met
+ * - PENDING: Awaiting verification
+ * - REJECTED: Critical data missing or invalid
+ * - EXPIRED: License has expired
+ */
+
 class TherapistVerificationService {
-  // Simulate automatic license verification
-  static async verifyLicense(therapistData) {
-    const {
-      licenseNumber,
-      issuingAuthority,
-      licenseExpiryDate,
-      licenseDocument
-    } = therapistData;
-
+  /**
+   * Verify therapist based on Ethiopian licensing practices
+   * 
+   * Requirements:
+   * 1. Valid degree (Psychology, Clinical Psychology, Social Work)
+   * 2. Valid license number
+   * 3. Issuing authority (Ministry of Health or Regional Bureau)
+   * 4. License not expired
+   * 5. Competency exam (COC or equivalent)
+   */
+  static async verifyTherapist(therapistData) {
     try {
-      // Simulate verification process
-      const verificationResult = await this.simulateVerification(
-        licenseNumber,
-        issuingAuthority,
-        licenseExpiryDate,
-        licenseDocument
-      );
+      const therapist = therapistData;
 
+      // Step 1: Check if license is expired
+      const now = new Date();
+      const expiryDate = new Date(therapist.license.licenseExpiryDate);
+
+      if (expiryDate < now) {
+        return {
+          status: 'EXPIRED',
+          notes: 'License has expired',
+          verifiedAt: new Date()
+        };
+      }
+
+      // Step 2: Validate education
+      const validDegrees = ['Psychology', 'Clinical Psychology', 'Social Work'];
+      const isValidEducation = validDegrees.includes(therapist.education.field);
+
+      if (!isValidEducation) {
+        return {
+          status: 'REJECTED',
+          notes: 'Invalid educational qualification. Must be Psychology, Clinical Psychology, or Social Work',
+          verifiedAt: new Date()
+        };
+      }
+
+      // Step 3: Validate license information
+      if (!therapist.license.licenseNumber || therapist.license.licenseNumber.trim().length === 0) {
+        return {
+          status: 'REJECTED',
+          notes: 'Invalid license number',
+          verifiedAt: new Date()
+        };
+      }
+
+      // Step 4: Validate issuing authority
+      const validAuthorities = ['Ministry of Health', 'Regional Bureau of Health', 'Other'];
+      if (!validAuthorities.includes(therapist.license.issuingAuthority)) {
+        return {
+          status: 'REJECTED',
+          notes: 'Invalid issuing authority',
+          verifiedAt: new Date()
+        };
+      }
+
+      // Step 5: Check competency (COC or exam passed)
+      const hasCompetency = therapist.competency.hasCOC || therapist.competency.examPassed;
+
+      if (!hasCompetency) {
+        return {
+          status: 'PENDING',
+          notes: 'Awaiting competency exam results (COC or equivalent)',
+          verifiedAt: new Date()
+        };
+      }
+
+      // Step 6: Check required documents
+      if (!therapist.license.licenseDocument) {
+        return {
+          status: 'PENDING',
+          notes: 'Awaiting license document upload',
+          verifiedAt: new Date()
+        };
+      }
+
+      // All criteria met - VERIFIED
       return {
-        status: verificationResult.status,
-        result: verificationResult.message,
+        status: 'VERIFIED',
+        notes: 'Successfully verified as a licensed mental health professional',
         verifiedAt: new Date()
       };
     } catch (error) {
       return {
-        status: 'failed',
-        result: 'Verification process failed',
+        status: 'REJECTED',
+        notes: `Verification error: ${error.message}`,
         verifiedAt: new Date()
       };
     }
   }
 
-  // Simulate the verification logic
-  static async simulateVerification(licenseNumber, issuingAuthority, expiryDate, document) {
-    // Simulate API call delay
-    await new Promise(resolve => setTimeout(resolve, 2000));
-
-    // Check license number format (basic validation)
-    if (!licenseNumber || licenseNumber.length < 5) {
-      return {
-        status: 'failed',
-        message: 'Invalid license number format'
-      };
-    }
-
-    // Check expiry date
-    const now = new Date();
-    const expiry = new Date(expiryDate);
-
-    if (expiry < now) {
-      return {
-        status: 'expired',
-        message: 'License has expired'
-      };
-    }
-
-    // Simulate random verification results for demo
-    const random = Math.random();
-
-    if (random < 0.7) {
-      return {
-        status: 'verified',
-        message: 'License verified successfully'
-      };
-    } else if (random < 0.85) {
-      return {
-        status: 'flagged',
-        message: 'License flagged for manual review'
-      };
-    } else {
-      return {
-        status: 'failed',
-        message: 'License verification failed'
-      };
-    }
-  }
-
-  // Re-verify therapist license
-  static async reverifyTherapist(therapistId, newLicenseData) {
+  /**
+   * Register new therapist
+   * Sets initial status to PENDING and runs verification
+   */
+  static async registerTherapist(userId, therapistData) {
     try {
-      const therapist = await Therapist.findById(therapistId);
-      if (!therapist) {
-        throw new Error('Therapist not found');
-      }
+      // Create new therapist record with PENDING status
+      const therapist = new Therapist({
+        userId,
+        specialization: therapistData.specialization,
+        experienceYears: therapistData.experienceYears,
+        bio: therapistData.bio,
+        workplace: therapistData.workplace,
+        education: therapistData.education,
+        license: therapistData.license,
+        competency: therapistData.competency,
+        languages: therapistData.languages,
+        hourlyRate: therapistData.hourlyRate,
+        verification: {
+          status: 'PENDING',
+          notes: 'Initial registration - pending verification',
+          verifiedAt: null
+        }
+      });
 
-      // Update license data
-      therapist.licenseNumber = newLicenseData.licenseNumber;
-      therapist.issuingAuthority = newLicenseData.issuingAuthority;
-      therapist.licenseExpiryDate = newLicenseData.licenseExpiryDate;
-      therapist.licenseDocument = newLicenseData.licenseDocument;
-      therapist.verificationStatus = 'pending';
+      // Run automatic verification
+      const verificationResult = await this.verifyTherapist(therapist);
 
-      // Run verification
-      const verification = await this.verifyLicense(therapist);
+      // Update verification status
+      therapist.verification = verificationResult;
 
-      therapist.verificationStatus = verification.status;
-      therapist.verificationResult = verification.result;
-
+      // Save to database
       await therapist.save();
 
       return therapist;
     } catch (error) {
-      throw error;
+      throw new Error(`Failed to register therapist: ${error.message}`);
     }
+  }
+
+  /**
+   * Re-upload license and re-verify
+   */
+  static async reuploadLicense(therapistId, licenseData) {
+    try {
+      const therapist = await Therapist.findById(therapistId);
+
+      if (!therapist) {
+        throw new Error('Therapist not found');
+      }
+
+      // Update license information
+      therapist.license = {
+        ...therapist.license,
+        ...licenseData
+      };
+
+      // Reset status to PENDING for re-verification
+      therapist.verification.status = 'PENDING';
+      therapist.verification.notes = 'License re-uploaded - re-verification in progress';
+      therapist.verification.verifiedAt = null;
+
+      await therapist.save();
+
+      // Run verification
+      const verificationResult = await this.verifyTherapist(therapist);
+
+      // Update verification status
+      therapist.verification = verificationResult;
+      await therapist.save();
+
+      return therapist;
+    } catch (error) {
+      throw new Error(`Failed to re-upload license: ${error.message}`);
+    }
+  }
+
+  /**
+   * Check if therapist is eligible for appointments
+   * Only VERIFIED therapists can be booked
+   */
+  static isEligibleForService(therapist) {
+    return therapist.verification.status === 'VERIFIED';
+  }
+
+  /**
+   * Get verification status details
+   */
+  static getVerificationDetails(therapist) {
+    return {
+      status: therapist.verification.status,
+      notes: therapist.verification.notes,
+      verifiedAt: therapist.verification.verifiedAt,
+      licenseExpiryDate: therapist.license.licenseExpiryDate,
+      isEligible: this.isEligibleForService(therapist)
+    };
   }
 }
 

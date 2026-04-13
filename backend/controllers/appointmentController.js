@@ -41,7 +41,7 @@ class AppointmentController {
       // Check if therapist exists and is verified
       const therapist = await Therapist.findOne({
         userId: therapistId,
-        verificationStatus: 'verified'
+        'verification.status': 'VERIFIED'
       });
 
       if (!therapist) {

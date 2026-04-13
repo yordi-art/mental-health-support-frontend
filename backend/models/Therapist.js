@@ -1,5 +1,12 @@
 const mongoose = require('mongoose');
 
+/**
+ * Therapist Model
+ * 
+ * This system performs preliminary digital verification and does not replace 
+ * official licensing by the Ministry of Health or regulatory authorities in Ethiopia.
+ */
+
 const therapistSchema = new mongoose.Schema({
   userId: {
     type: mongoose.Schema.Types.ObjectId,
@@ -7,6 +14,8 @@ const therapistSchema = new mongoose.Schema({
     required: true,
     unique: true
   },
+
+  // Professional Information
   specialization: [{
     type: String,
     required: true
@@ -25,30 +34,78 @@ const therapistSchema = new mongoose.Schema({
     type: String,
     required: true
   },
-  verificationStatus: {
-    type: String,
-    enum: ['pending', 'verified', 'failed', 'flagged', 'expired'],
-    default: 'pending'
+
+  // Education Details
+  education: {
+    degreeType: {
+      type: String,
+      enum: ['Bachelor', 'Master', 'Doctorate', 'Diploma'],
+      required: true
+    },
+    field: {
+      type: String,
+      enum: ['Psychology', 'Clinical Psychology', 'Social Work', 'Counseling', 'Other'],
+      required: true
+    },
+    institution: {
+      type: String,
+      required: true
+    },
+    graduationYear: {
+      type: Number,
+      required: true
+    }
   },
-  licenseNumber: {
-    type: String,
-    required: true,
-    unique: true
+
+  // License Information
+  license: {
+    licenseNumber: {
+      type: String,
+      required: true,
+      unique: true
+    },
+    issuingAuthority: {
+      type: String,
+      enum: ['Ministry of Health', 'Regional Bureau of Health', 'Other'],
+      required: true
+    },
+    licenseExpiryDate: {
+      type: Date,
+      required: true
+    },
+    licenseDocument: {
+      type: String // URL to uploaded document
+    }
   },
-  issuingAuthority: {
-    type: String,
-    required: true
+
+  // Competency Information
+  competency: {
+    hasCOC: {
+      type: Boolean,
+      default: false
+    },
+    examPassed: {
+      type: Boolean,
+      default: false
+    }
   },
-  licenseExpiryDate: {
-    type: Date,
-    required: true
+
+  // Verification Status
+  verification: {
+    status: {
+      type: String,
+      enum: ['VERIFIED', 'PENDING', 'REJECTED', 'EXPIRED'],
+      default: 'PENDING'
+    },
+    notes: {
+      type: String
+    },
+    verifiedAt: {
+      type: Date
+    }
   },
-  licenseDocument: {
-    type: String // URL to uploaded document
-  },
-  verificationResult: {
-    type: String
-  },
+
+  // Additional Fields
   hourlyRate: {
     type: Number,
     default: 50
@@ -64,10 +121,21 @@ const therapistSchema = new mongoose.Schema({
   languages: [{
     type: String
   }],
+
   createdAt: {
     type: Date,
     default: Date.now
+  },
+  updatedAt: {
+    type: Date,
+    default: Date.now
   }
+});
+
+// Update updatedAt before saving
+therapistSchema.pre('save', function(next) {
+  this.updatedAt = Date.now();
+  next();
 });
 
 module.exports = mongoose.model('Therapist', therapistSchema);

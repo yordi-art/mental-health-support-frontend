@@ -61,7 +61,7 @@ router.get('/therapists', async (req, res) => {
   try {
     const { specialization, location, page = 1, limit = 10 } = req.query;
 
-    let query = { verificationStatus: 'verified' };
+    let query = { 'verification.status': 'VERIFIED' };
 
     if (specialization) {
       query.specialization = { $in: [specialization] };

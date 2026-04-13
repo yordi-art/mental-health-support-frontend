@@ -1,13 +1,25 @@
 const express = require('express');
 const TherapistController = require('../controllers/therapistController');
 const AppointmentController = require('../controllers/appointmentController');
-const ReviewController = require('../controllers/reviewController');
 const auth = require('../middleware/auth');
 const roleAuth = require('../middleware/roleAuth');
 
 const router = express.Router();
 
-// Apply auth middleware to all routes
+/**
+ * Public Routes
+ * Therapist Registration
+ */
+
+// Register therapist (public)
+router.post('/register', TherapistController.registerTherapist);
+
+/**
+ * Protected Routes
+ * Require authentication and therapist role
+ */
+
+// Apply auth middleware to protected routes
 router.use(auth);
 router.use(roleAuth(['therapist']));
 
@@ -53,7 +65,7 @@ router.get('/dashboard', async (req, res) => {
         { $group: { _id: null, average: { $avg: '$rating' } } }
       ]),
 
-      require('../models/Therapist').findOne({ userId: req.user._id }, 'verificationStatus')
+      require('../models/Therapist').findOne({ userId: req.user._id }, 'verification')
     ]);
 
     res.json({
@@ -62,7 +74,7 @@ router.get('/dashboard', async (req, res) => {
         totalAppointments,
         totalEarnings: totalEarnings[0]?.total || 0,
         averageRating: averageRating[0]?.average ? Math.round(averageRating[0].average * 10) / 10 : 0,
-        verificationStatus: verificationStatus?.verificationStatus || 'unknown'
+        verificationStatus: verificationStatus?.verification?.status || 'PENDING'
       }
     });
   } catch (error) {
@@ -86,28 +98,6 @@ router.put('/appointments/:id/status', AppointmentController.updateAppointmentSt
 router.put('/availability', TherapistController.updateAvailability);
 
 // Reviews
-router.get('/reviews', async (req, res) => {
-  try {
-    const reviews = await require('../models/Review').find({ therapistId: req.user._id })
-      .populate('clientId', 'name')
-      .populate('appointmentId', 'date sessionType')
-      .sort({ createdAt: -1 });
-
-    const totalReviews = reviews.length;
-    const averageRating = totalReviews > 0
-      ? reviews.reduce((sum, review) => sum + review.rating, 0) / totalReviews
-      : 0;
-
-    res.json({
-      reviews,
-      stats: {
-        totalReviews,
-        averageRating: Math.round(averageRating * 10) / 10
-      }
-    });
-  } catch (error) {
-    res.status(500).json({ message: 'Failed to get reviews', error: error.message });
-  }
-});
+router.get('/reviews', TherapistController.getReviews);
 
 module.exports = router;

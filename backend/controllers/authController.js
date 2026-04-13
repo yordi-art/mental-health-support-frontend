@@ -1,13 +1,18 @@
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
-const Therapist = require('../models/Therapist');
-const TherapistVerificationService = require('../services/therapistVerificationService');
 
 class AuthController {
-  // Register user
+  // Register client user (not therapists - use POST /api/therapist/register for therapist registration)
   static async register(req, res) {
     try {
       const { name, email, password, role, phone, gender, dateOfBirth } = req.body;
+
+      // Only allow client registration through this endpoint
+      if (role === 'therapist') {
+        return res.status(400).json({
+          message: 'Therapists must register via POST /api/therapist/register'
+        });
+      }
 
       // Check if user already exists
       const existingUser = await User.findOne({ email });
@@ -27,29 +32,6 @@ class AuthController {
       });
 
       await user.save();
-
-      // If therapist, create therapist profile and start verification
-      if (role === 'therapist') {
-        const therapistData = req.body.therapistData;
-        if (!therapistData) {
-          // Delete user if therapist data not provided
-          await User.findByIdAndDelete(user._id);
-          return res.status(400).json({ message: 'Therapist data required for therapist registration' });
-        }
-
-        const therapist = new Therapist({
-          userId: user._id,
-          ...therapistData
-        });
-
-        await therapist.save();
-
-        // Start automatic verification
-        const verification = await TherapistVerificationService.verifyLicense(therapist);
-        therapist.verificationStatus = verification.status;
-        therapist.verificationResult = verification.result;
-        await therapist.save();
-      }
 
       // Generate token
       const token = jwt.sign(
