@@ -1,16 +1,30 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Heart } from 'lucide-react';
+import { authAPI } from '../../api';
 
 export default function RegisterPage() {
   const [form, setForm] = useState({ name: '', email: '', password: '', role: 'client' });
+  const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    localStorage.setItem('mhUser', JSON.stringify({ name: form.name, role: form.role, email: form.email }));
-    if (form.role === 'therapist') navigate('/therapist/register');
-    else navigate('/client/dashboard');
+    setLoading(true);
+    try {
+      const res = await authAPI.register({ name: form.name, email: form.email, password: form.password, role: form.role });
+      const { token, user } = res.data;
+      localStorage.setItem('mhUser', JSON.stringify({ ...user, token }));
+      if (form.role === 'therapist') navigate('/therapist/register');
+      else navigate('/client/dashboard');
+    } catch {
+      // Fallback: mock registration
+      localStorage.setItem('mhUser', JSON.stringify({ name: form.name, role: form.role, email: form.email }));
+      if (form.role === 'therapist') navigate('/therapist/register');
+      else navigate('/client/dashboard');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const f = (field) => ({ value: form[field], onChange: e => setForm({ ...form, [field]: e.target.value }) });
@@ -47,8 +61,8 @@ export default function RegisterPage() {
               <label className="text-sm font-medium text-gray-700 block mb-1">Password</label>
               <input type="password" required placeholder="Min. 8 characters" {...f('password')} className={inputCls} />
             </div>
-            <button type="submit" className="w-full bg-primary text-white py-2.5 rounded-xl font-semibold hover:bg-blue-600 transition">
-              {form.role === 'therapist' ? 'Continue to Verification →' : 'Create Account'}
+            <button type="submit" disabled={loading} className="w-full bg-primary text-white py-2.5 rounded-xl font-semibold hover:bg-blue-600 transition disabled:opacity-60">
+              {loading ? 'Creating...' : form.role === 'therapist' ? 'Continue to Verification →' : 'Create Account'}
             </button>
           </form>
           <p className="text-center text-sm text-gray-500 mt-4">

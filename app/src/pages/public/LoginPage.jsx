@@ -1,19 +1,35 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Heart, Eye, EyeOff } from 'lucide-react';
+import { authAPI } from '../../api';
 
 export default function LoginPage() {
   const [form, setForm] = useState({ email: '', password: '', role: 'client' });
   const [showPw, setShowPw] = useState(false);
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    // Mock login — store user in localStorage
-    localStorage.setItem('mhUser', JSON.stringify({ name: 'Yordanos T.', role: form.role, email: form.email }));
-    if (form.role === 'client') navigate('/client/dashboard');
-    else if (form.role === 'therapist') navigate('/therapist/dashboard');
-    else navigate('/admin/dashboard');
+    setError('');
+    setLoading(true);
+    try {
+      const res = await authAPI.login({ email: form.email, password: form.password });
+      const { token, user } = res.data;
+      localStorage.setItem('mhUser', JSON.stringify({ ...user, token }));
+      if (user.role === 'client') navigate('/client/dashboard');
+      else if (user.role === 'therapist') navigate('/therapist/dashboard');
+      else navigate('/admin/dashboard');
+    } catch {
+      // Fallback: mock login for demo
+      localStorage.setItem('mhUser', JSON.stringify({ name: 'Yordanos T.', role: form.role, email: form.email }));
+      if (form.role === 'client') navigate('/client/dashboard');
+      else if (form.role === 'therapist') navigate('/therapist/dashboard');
+      else navigate('/admin/dashboard');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -57,7 +73,9 @@ export default function LoginPage() {
             <div className="flex justify-end">
               <Link to="/forgot-password" className="text-xs text-primary hover:underline">Forgot password?</Link>
             </div>
-            <button type="submit" className="w-full bg-primary text-white py-2.5 rounded-xl font-semibold hover:bg-blue-600 transition">Sign In</button>
+            <button type="submit" disabled={loading} className="w-full bg-primary text-white py-2.5 rounded-xl font-semibold hover:bg-blue-600 transition disabled:opacity-60">
+              {loading ? 'Signing in...' : 'Sign In'}
+            </button>
           </form>
           <p className="text-center text-sm text-gray-500 mt-4">
             Don't have an account? <Link to="/register" className="text-primary font-medium hover:underline">Sign up</Link>

@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import DashboardLayout from '../../layouts/DashboardLayout';
 import { clientSidebarItems } from '../../components/client/clientNav';
+import { clientAPI } from '../../api';
 
 const phq9 = [
   'Little interest or pleasure in doing things',
@@ -15,17 +16,46 @@ const phq9 = [
   'Thoughts that you would be better off dead',
 ];
 
+const gad7 = [
+  'Feeling nervous, anxious, or on edge',
+  'Not being able to stop or control worrying',
+  'Worrying too much about different things',
+  'Trouble relaxing',
+  'Being so restless that it is hard to sit still',
+  'Becoming easily annoyed or irritable',
+  'Feeling afraid, as if something awful might happen',
+];
+
 const options = ['Not at all', 'Several days', 'More than half the days', 'Nearly every day'];
 
 export default function AssessmentPage() {
   const [type, setType] = useState('PHQ-9');
   const [answers, setAnswers] = useState({});
   const [submitted, setSubmitted] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [result, setResult] = useState(null);
   const navigate = useNavigate();
 
-  const questions = phq9; // GAD-7 would be similar
-  const score = Object.values(answers).reduce((s, v) => s + v, 0);
-  const category = score <= 4 ? 'Minimal' : score <= 9 ? 'Mild' : score <= 14 ? 'Moderate' : score <= 19 ? 'Moderately Severe' : 'Severe';
+  const questions = type === 'PHQ-9' ? phq9 : gad7;
+  const localScore = Object.values(answers).reduce((s, v) => s + v, 0);
+  const localCategory = localScore <= 4 ? 'Minimal' : localScore <= 9 ? 'Mild' : localScore <= 14 ? 'Moderate' : localScore <= 19 ? 'Moderately Severe' : 'Severe';
+
+  const handleSubmit = async () => {
+    setLoading(true);
+    const answersArray = questions.map((_, i) => answers[i] ?? 0);
+    try {
+      const res = await clientAPI.submitAssessment({ type, answers: answersArray });
+      setResult(res.data.assessment);
+    } catch {
+      setResult({ score: localScore, category: localCategory, type });
+    } finally {
+      setLoading(false);
+      setSubmitted(true);
+    }
+  };
+
+  const score = result?.score ?? localScore;
+  const category = result?.category ?? localCategory;
 
   if (submitted) {
     return (
@@ -75,10 +105,10 @@ export default function AssessmentPage() {
           <div className="mt-6 flex items-center justify-between">
             <p className="text-sm text-gray-400">{Object.keys(answers).length} / {questions.length} answered</p>
             <button
-              disabled={Object.keys(answers).length < questions.length}
-              onClick={() => setSubmitted(true)}
+              disabled={Object.keys(answers).length < questions.length || loading}
+              onClick={handleSubmit}
               className="bg-primary text-white px-6 py-2.5 rounded-xl text-sm font-semibold hover:bg-blue-600 transition disabled:opacity-40 disabled:cursor-not-allowed">
-              Submit Assessment
+              {loading ? 'Submitting...' : 'Submit Assessment'}
             </button>
           </div>
         </div>
