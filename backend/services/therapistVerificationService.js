@@ -159,9 +159,9 @@ class TherapistVerificationService {
   /**
    * Re-upload license and re-verify
    */
-  static async reuploadLicense(therapistId, licenseData) {
+  static async reuploadLicense(userId, licenseData) {
     try {
-      const therapist = await Therapist.findById(therapistId);
+      const therapist = await Therapist.findOne({ userId });
 
       if (!therapist) {
         throw new Error('Therapist not found');

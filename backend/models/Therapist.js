@@ -133,9 +133,8 @@ const therapistSchema = new mongoose.Schema({
 });
 
 // Update updatedAt before saving
-therapistSchema.pre('save', function(next) {
+therapistSchema.pre('save', async function() {
   this.updatedAt = Date.now();
-  next();
 });
 
 module.exports = mongoose.model('Therapist', therapistSchema);
