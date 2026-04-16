@@ -27,9 +27,9 @@ class AuthController {
         email,
         password,
         role: role || 'client',
-        phone,
-        gender,
-        dateOfBirth: new Date(dateOfBirth)
+        ...(phone && { phone }),
+        ...(gender && { gender }),
+        ...(dateOfBirth && { dateOfBirth: new Date(dateOfBirth) }),
       });
 
       await user.save();

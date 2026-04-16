@@ -13,12 +13,30 @@ export default function RegisterPage() {
     e.preventDefault();
     setLoading(true);
     setError('');
+
+    // Therapists go to the dedicated registration page — no API call here
+    if (form.role === 'therapist') {
+      // Store basic info temporarily so TherapistRegisterPage can pre-fill
+      sessionStorage.setItem('therapistBasic', JSON.stringify({
+        name: form.name,
+        email: form.email,
+        password: form.password,
+      }));
+      navigate('/therapist/register');
+      setLoading(false);
+      return;
+    }
+
     try {
-      const res = await authAPI.register({ name: form.name, email: form.email, password: form.password, role: form.role });
+      const res = await authAPI.register({
+        name: form.name,
+        email: form.email,
+        password: form.password,
+        role: 'client',
+      });
       const { token, user } = res.data;
       localStorage.setItem('mhUser', JSON.stringify({ ...user, token }));
-      if (form.role === 'therapist') navigate('/therapist/register');
-      else navigate('/client/dashboard');
+      navigate('/client/dashboard');
     } catch (err) {
       setError(err.response?.data?.message || 'Registration failed. Please try again.');
     } finally {
@@ -81,7 +99,7 @@ export default function RegisterPage() {
             </div>
 
             {error && (
-              <div className="bg-error/20 border border-error/40 text-white text-sm rounded-xl px-4 py-2.5">{error}</div>
+              <div className="bg-red-500/20 border border-red-400/40 text-white text-sm rounded-xl px-4 py-2.5">{error}</div>
             )}
 
             <button
@@ -95,7 +113,7 @@ export default function RegisterPage() {
                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                     <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
                   </svg>
-                  Creating account...
+                  Please wait...
                 </span>
               ) : (
                 <>
