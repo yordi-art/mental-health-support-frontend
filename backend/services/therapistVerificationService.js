@@ -1,4 +1,7 @@
 const Therapist = require('../models/Therapist');
+const User = require('../models/User');
+const { notify } = require('./notificationService');
+const { sendEmail } = require('./emailService');
 
 /**
  * Therapist License Verification Service
@@ -139,6 +142,13 @@ class TherapistVerificationService {
 
       // Save to database
       await therapist.save();
+
+      // Notify therapist of verification result
+      const user = await User.findById(userId);
+      if (user) {
+        await notify(userId, `Verification status: ${verificationResult.status} — ${verificationResult.notes}`, 'verification_status', therapist._id);
+        sendEmail(user.email, 'therapistVerification', { name: user.name, status: verificationResult.status, notes: verificationResult.notes });
+      }
 
       return therapist;
     } catch (error) {

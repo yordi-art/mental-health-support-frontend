@@ -1,6 +1,7 @@
 const Payment = require('../models/Payment');
 const Appointment = require('../models/Appointment');
-const Notification = require('../models/Notification');
+const { notify } = require('../services/notificationService');
+const { sendEmail } = require('../services/emailService');
 
 class PaymentController {
   // Get user payments
@@ -64,12 +65,13 @@ class PaymentController {
       appointment.paymentStatus = 'paid';
       await appointment.save();
 
-      // Create notification
-      await Notification.create({
-        userId: req.user._id,
-        message: `Payment of ${amount} ETB successful for appointment`,
-        type: 'payment_success',
-        relatedId: payment._id
+      // Notify + email
+      await notify(req.user._id, `Payment of ${amount} ETB successful for appointment`, 'payment_success', payment._id);
+      sendEmail(req.user.email, 'paymentConfirmation', {
+        name: req.user.name,
+        amount,
+        transactionId: paymentResult.transactionId,
+        appointmentDate: appointment.date,
       });
 
       const populatedPayment = await Payment.findById(payment._id).populate('appointmentId');

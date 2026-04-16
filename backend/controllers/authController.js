@@ -1,5 +1,6 @@
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
+const { sendEmail } = require('../services/emailService');
 
 class AuthController {
   // Register client user (not therapists - use POST /api/therapist/register for therapist registration)
@@ -32,6 +33,9 @@ class AuthController {
       });
 
       await user.save();
+
+      // Send welcome email
+      sendEmail(user.email, 'welcome', { name: user.name });
 
       // Generate token
       const token = jwt.sign(

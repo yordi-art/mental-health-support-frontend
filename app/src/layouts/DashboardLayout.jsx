@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { Heart, Bell, Menu, X, LogOut, ChevronRight } from 'lucide-react';
+import { Heart, Menu, X, LogOut, ChevronRight } from 'lucide-react';
+import NotificationBell from '../components/common/NotificationBell';
 
 export default function DashboardLayout({ children, sidebarItems, role = 'client', userName = 'User' }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -53,10 +54,7 @@ export default function DashboardLayout({ children, sidebarItems, role = 'client
         <header className="h-16 bg-white shadow-sm flex items-center px-4 gap-4 sticky top-0 z-30">
           <button className="md:hidden" onClick={() => setSidebarOpen(true)}><Menu size={22} /></button>
           <div className="ml-auto flex items-center gap-3">
-            <button className="relative p-2 rounded-xl hover:bg-gray-50">
-              <Bell size={18} className="text-gray-500" />
-              <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full" />
-            </button>
+            <NotificationBell />
             <button
               onClick={handleLogout}
               className="hidden sm:flex items-center gap-2 text-sm text-gray-500 hover:text-red-500 transition rounded-xl px-3 py-2 hover:bg-red-50"

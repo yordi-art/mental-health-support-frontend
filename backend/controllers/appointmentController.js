@@ -1,6 +1,8 @@
 const Appointment = require('../models/Appointment');
 const Therapist = require('../models/Therapist');
-const Notification = require('../models/Notification');
+const User = require('../models/User');
+const { notify } = require('../services/notificationService');
+const { sendEmail } = require('../services/emailService');
 
 class AppointmentController {
   // Get user appointments
@@ -73,12 +75,17 @@ class AppointmentController {
 
       await appointment.save();
 
-      // Create notification for therapist
-      await Notification.create({
-        userId: therapistId,
-        message: `New appointment request from ${req.user.name}`,
-        type: 'appointment_reminder',
-        relatedId: appointment._id
+      // Notify therapist
+      await notify(therapistId, `New appointment request from ${req.user.name}`, 'appointment_reminder', appointment._id);
+
+      // Email client confirmation
+      const therapistUser = await User.findById(therapistId);
+      sendEmail(req.user.email, 'appointmentBooked', {
+        clientName: req.user.name,
+        therapistName: therapistUser?.name || 'Your therapist',
+        date: appointment.date,
+        time: appointment.time,
+        sessionType: appointment.sessionType || 'Online',
       });
 
       const populatedAppointment = await Appointment.findById(appointment._id)
@@ -136,12 +143,7 @@ class AppointmentController {
       }
 
       if (notificationMessage && notificationUserId) {
-        await Notification.create({
-          userId: notificationUserId,
-          message: notificationMessage,
-          type: 'appointment_confirmed',
-          relatedId: appointment._id
-        });
+        await notify(notificationUserId, notificationMessage, 'appointment_confirmed', appointment._id);
       }
 
       const updatedAppointment = await Appointment.findById(id)
@@ -185,15 +187,9 @@ class AppointmentController {
       appointment.status = 'cancelled';
       await appointment.save();
 
-      // Create notification for the other party
+      // Notify the other party
       const notificationUserId = req.user.role === 'client' ? appointment.therapistId : appointment.clientId;
-
-      await Notification.create({
-        userId: notificationUserId,
-        message: 'Your appointment has been cancelled',
-        type: 'appointment_cancelled',
-        relatedId: appointment._id
-      });
+      await notify(notificationUserId, 'Your appointment has been cancelled', 'appointment_cancelled', appointment._id);
 
       res.json({ message: 'Appointment cancelled successfully' });
     } catch (error) {

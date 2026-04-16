@@ -1,14 +1,33 @@
-import { Users, UserCheck, Calendar, DollarSign, AlertTriangle, Flag, Eye, ShieldOff, RefreshCw } from 'lucide-react';
+import { Users, UserCheck, Calendar, DollarSign, AlertTriangle, Flag, Eye, ShieldOff, RefreshCw, Megaphone, Send } from 'lucide-react';
 import DashboardLayout from '../../layouts/DashboardLayout';
 import DashboardCard from '../../components/common/DashboardCard';
 import StatusBadge from '../../components/common/StatusBadge';
 import SearchBar from '../../components/common/SearchBar';
 import { adminSidebarItems } from '../../components/admin/adminNav';
 import { adminStats, verificationQueue } from '../../data/sampleData';
+import { notificationAPI } from '../../api';
 import { useState } from 'react';
 
 export default function AdminDashboard() {
   const [search, setSearch] = useState('');
+  const [announcement, setAnnouncement] = useState('');
+  const [announceSending, setAnnounceSending] = useState(false);
+  const [announceMsg, setAnnounceMsg] = useState('');
+
+  const sendAnnouncement = async () => {
+    if (!announcement.trim()) return;
+    setAnnounceSending(true);
+    try {
+      await notificationAPI.sendAnnouncement({ userIds: [], message: announcement });
+      setAnnounceMsg('Announcement sent!');
+      setAnnouncement('');
+    } catch {
+      setAnnounceMsg('Failed to send.');
+    } finally {
+      setAnnounceSending(false);
+      setTimeout(() => setAnnounceMsg(''), 3000);
+    }
+  };
 
   const filtered = verificationQueue.filter(v =>
     v.name.toLowerCase().includes(search.toLowerCase()) ||
@@ -83,6 +102,27 @@ export default function AdminDashboard() {
             </tbody>
           </table>
         </div>
+      </div>
+
+      {/* Announcement Panel */}
+      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 mb-6">
+        <h2 className="font-semibold text-slate-800 mb-3 flex items-center gap-2"><Megaphone size={16} className="text-warning" /> Send Announcement</h2>
+        <div className="flex gap-3">
+          <input
+            value={announcement}
+            onChange={e => setAnnouncement(e.target.value)}
+            placeholder="Type a system-wide announcement..."
+            className="flex-1 border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+          />
+          <button
+            onClick={sendAnnouncement}
+            disabled={announceSending || !announcement.trim()}
+            className="flex items-center gap-2 bg-primary text-white px-4 py-2.5 rounded-xl text-sm font-medium hover:bg-blue-600 transition disabled:opacity-50"
+          >
+            <Send size={14} /> {announceSending ? 'Sending...' : 'Send'}
+          </button>
+        </div>
+        {announceMsg && <p className="text-xs text-success mt-2">{announceMsg}</p>}
       </div>
 
       {/* Bottom Grid */}

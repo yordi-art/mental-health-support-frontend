@@ -106,4 +106,11 @@ export const publicAPI = {
   getTherapistById: (id) => api.get(`/therapists/${id}`),
 };
 
+// ─── Notifications ───────────────────────────────────────────────────────────
+export const notificationAPI = {
+  getAll: () => api.get('/notifications'),
+  markRead: (ids) => api.patch('/notifications/read', { ids }),
+  sendAnnouncement: (data) => api.post('/notifications/send', data),
+};
+
 export default api;
