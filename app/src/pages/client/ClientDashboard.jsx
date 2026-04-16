@@ -33,9 +33,26 @@ export default function ClientDashboard() {
       publicAPI.getTherapists({ limit: 2 }),
       notificationAPI.getAll(),
     ]).then(([dash, th, notif]) => {
-      setDashboard(dash.data);
+      const data = dash.data;
+      // Normalize backend shape to what the UI expects
+      const upcoming = data.upcomingAppointments?.[0] || data.upcomingAppointment || null;
+      const latestRaw = data.recentAssessments?.[0] || data.latestAssessment || null;
+      setDashboard({
+        upcomingAppointment: upcoming ? {
+          ...upcoming,
+          therapistName: upcoming.therapistId?.userId?.name || 'Therapist',
+        } : null,
+        latestAssessment: latestRaw ? {
+          type: latestRaw.type || latestRaw.assessmentType || '—',
+          score: latestRaw.score ?? latestRaw.totalScore ?? '—',
+          category: latestRaw.category || latestRaw.severity || '—',
+          recommendation: latestRaw.recommendation || '',
+          date: latestRaw.date || (latestRaw.createdAt ? new Date(latestRaw.createdAt).toLocaleDateString() : ''),
+        } : null,
+        billing: data.billing || null,
+      });
       setTherapists(th.data?.therapists || th.data || []);
-      setNotifications(notif.data?.notifications || []);
+      setNotifications(notif.data?.notifications || notif.data || []);
     }).catch(() => {}).finally(() => setLoading(false));
   }, []);
 
