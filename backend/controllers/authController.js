@@ -3,10 +3,19 @@ const User = require('../models/User');
 const { sendEmail } = require('../services/emailService');
 
 class AuthController {
-  // Register client user (not therapists - use POST /api/therapist/register for therapist registration)
   static async register(req, res) {
     try {
       const { name, email, password, role, phone, gender, dateOfBirth } = req.body;
+
+      // Validate required fields
+      if (!name || !email || !password) {
+        return res.status(400).json({ message: 'Name, email, and password are required' });
+      }
+
+      // Validate password length
+      if (password.length < 6) {
+        return res.status(400).json({ message: 'Password must be at least 6 characters long' });
+      }
 
       // Only allow client registration through this endpoint
       if (role === 'therapist') {
@@ -34,8 +43,12 @@ class AuthController {
 
       await user.save();
 
-      // Send welcome email
-      sendEmail(user.email, 'welcome', { name: user.name });
+      // Send welcome email (don't fail registration if email fails)
+      try {
+        await sendEmail(user.email, 'welcome', { name: user.name });
+      } catch (emailError) {
+        console.error('Welcome email failed:', emailError.message);
+      }
 
       // Generate token
       const token = jwt.sign(
@@ -55,6 +68,7 @@ class AuthController {
         }
       });
     } catch (error) {
+      console.error('Registration error:', error);
       res.status(500).json({ message: 'Registration failed', error: error.message });
     }
   }
