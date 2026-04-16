@@ -1,32 +1,27 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Heart, Eye, EyeOff } from 'lucide-react';
-import { authAPI } from '../../api';
+import { useAuth } from '../../context/AuthContext';
 
 export default function LoginPage() {
-  const [form, setForm] = useState({ email: '', password: '', role: 'client' });
+  const [form, setForm] = useState({ email: '', password: '' });
   const [showPw, setShowPw] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
+  const { login } = useAuth();
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
     setLoading(true);
     try {
-      const res = await authAPI.login({ email: form.email, password: form.password });
-      const { token, user } = res.data;
-      localStorage.setItem('mhUser', JSON.stringify({ ...user, token }));
+      const user = await login({ email: form.email, password: form.password });
       if (user.role === 'client') navigate('/client/dashboard');
       else if (user.role === 'therapist') navigate('/therapist/dashboard');
       else navigate('/admin/dashboard');
-    } catch {
-      // Fallback: mock login for demo
-      localStorage.setItem('mhUser', JSON.stringify({ name: 'Yordanos T.', role: form.role, email: form.email }));
-      if (form.role === 'client') navigate('/client/dashboard');
-      else if (form.role === 'therapist') navigate('/therapist/dashboard');
-      else navigate('/admin/dashboard');
+    } catch (err) {
+      setError(err.response?.data?.message || 'Invalid email or password.');
     } finally {
       setLoading(false);
     }
@@ -45,26 +40,23 @@ export default function LoginPage() {
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <label className="text-sm font-medium text-gray-700 block mb-1">Sign in as</label>
-              <select value={form.role} onChange={e => setForm({ ...form, role: e.target.value })}
-                className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30">
-                <option value="client">Client / Patient</option>
-                <option value="therapist">Therapist / Counselor</option>
-                <option value="admin">Admin</option>
-              </select>
-            </div>
-            <div>
               <label className="text-sm font-medium text-gray-700 block mb-1">Email</label>
-              <input type="email" required value={form.email} onChange={e => setForm({ ...form, email: e.target.value })}
+              <input
+                type="email" required value={form.email}
+                onChange={e => setForm({ ...form, email: e.target.value })}
                 placeholder="you@example.com"
-                className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30" />
+                className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+              />
             </div>
             <div>
               <label className="text-sm font-medium text-gray-700 block mb-1">Password</label>
               <div className="relative">
-                <input type={showPw ? 'text' : 'password'} required value={form.password} onChange={e => setForm({ ...form, password: e.target.value })}
+                <input
+                  type={showPw ? 'text' : 'password'} required value={form.password}
+                  onChange={e => setForm({ ...form, password: e.target.value })}
                   placeholder="••••••••"
-                  className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 pr-10" />
+                  className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 pr-10"
+                />
                 <button type="button" onClick={() => setShowPw(!showPw)} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400">
                   {showPw ? <EyeOff size={16} /> : <Eye size={16} />}
                 </button>
@@ -73,6 +65,7 @@ export default function LoginPage() {
             <div className="flex justify-end">
               <Link to="/forgot-password" className="text-xs text-primary hover:underline">Forgot password?</Link>
             </div>
+            {error && <p className="text-xs text-red-500 bg-red-50 rounded-xl px-3 py-2">{error}</p>}
             <button type="submit" disabled={loading} className="w-full bg-primary text-white py-2.5 rounded-xl font-semibold hover:bg-blue-600 transition disabled:opacity-60">
               {loading ? 'Signing in...' : 'Sign In'}
             </button>
