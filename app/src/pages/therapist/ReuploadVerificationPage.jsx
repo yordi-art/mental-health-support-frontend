@@ -25,15 +25,19 @@ export default function ReuploadVerificationPage() {
       setError('Please fill in all required fields.');
       return;
     }
+    if (!file) {
+      setError('Please upload your license document.');
+      return;
+    }
     setError('');
     setLoading(true);
     try {
-      const res = await therapistAPI.reuploadVerification({
-        licenseNumber: form.licenseNumber,
-        issuingAuthority: form.authority,
-        licenseExpiryDate: form.expiryDate,
-        licenseDocument: file ? file.name : 'pending_upload',
-      });
+      const fd = new FormData();
+      fd.append('licenseNumber', form.licenseNumber);
+      fd.append('issuingAuthority', form.authority);
+      fd.append('licenseExpiryDate', form.expiryDate);
+      fd.append('licenseDocument', file);
+      const res = await therapistAPI.reuploadVerification(fd);
       await refetchVerification();
       setResult(res.data.verification);
     } catch (err) {

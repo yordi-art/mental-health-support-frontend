@@ -4,6 +4,7 @@ const AppointmentController = require('../controllers/appointmentController');
 const auth = require('../middleware/auth');
 const roleAuth = require('../middleware/roleAuth');
 const verifiedTherapistOnly = require('../middleware/verifiedTherapistOnly');
+const { upload, handleUploadError } = require('../middleware/uploadMiddleware');
 
 const router = express.Router();
 
@@ -12,8 +13,8 @@ const router = express.Router();
  * Therapist Registration
  */
 
-// Register therapist (public)
-router.post('/register', TherapistController.registerTherapist);
+// Register therapist (public) — accepts multipart/form-data with optional licenseDocument file
+router.post('/register', upload.single('licenseDocument'), handleUploadError, TherapistController.registerTherapist);
 
 /**
  * Protected Routes
@@ -89,7 +90,7 @@ router.put('/profile', TherapistController.updateProfile);
 
 // Verification
 router.get('/verification-status', TherapistController.getVerificationStatus);
-router.post('/reupload-license', TherapistController.reuploadLicense);
+router.post('/reupload-license', upload.single('licenseDocument'), handleUploadError, TherapistController.reuploadLicense);
 
 // Appointments (VERIFIED only)
 router.get('/appointments', verifiedTherapistOnly, TherapistController.getAppointments);

@@ -2,308 +2,195 @@ const Therapist = require('../models/Therapist');
 const User = require('../models/User');
 const TherapistVerificationService = require('../services/therapistVerificationService');
 
-/**
- * Therapist Controller
- * 
- * This system performs preliminary digital verification and does not replace 
- * official licensing by the Ministry of Health or regulatory authorities in Ethiopia.
- */
-
 class TherapistController {
+
   /**
-   * Register therapist
    * POST /api/therapist/register
-   * Sets initial status to PENDING and runs automatic verification
+   * Accepts multipart/form-data with therapistData JSON + licenseDocument file
    */
   static async registerTherapist(req, res) {
     try {
       const { name, email, password, phone, gender, dateOfBirth } = req.body;
-      const therapistData = req.body.therapistData;
 
-      // Validate therapist data is provided
-      if (!therapistData) {
-        return res.status(400).json({
-          message: 'Therapist data is required'
-        });
+      // therapistData may come as JSON string (multipart) or parsed object (JSON)
+      let therapistData = req.body.therapistData;
+      if (typeof therapistData === 'string') {
+        try { therapistData = JSON.parse(therapistData); } catch {
+          return res.status(400).json({ message: 'Invalid therapistData format' });
+        }
       }
 
-      // Check if user already exists
+      if (!therapistData) {
+        return res.status(400).json({ message: 'Therapist data is required' });
+      }
+
       const existingUser = await User.findOne({ email });
       if (existingUser) {
-        return res.status(400).json({
-          message: 'Email already registered'
-        });
+        return res.status(400).json({ message: 'Email already registered' });
       }
 
-      // Create user account
-      const user = new User({
-        name,
-        email,
-        password,
-        phone,
-        gender,
-        dateOfBirth: new Date(dateOfBirth),
-        role: 'therapist'
-      });
-
+      const user = new User({ name, email, password, phone, gender, dateOfBirth: new Date(dateOfBirth), role: 'therapist' });
       await user.save();
 
-      // Register therapist with automatic verification
-      const therapist = await TherapistVerificationService.registerTherapist(
-        user._id,
-        therapistData
+      // Pass file buffer if uploaded
+      const fileBuffer = req.file?.buffer || null;
+      const fileMimetype = req.file?.mimetype || null;
+
+      // If file uploaded, store filename in license data
+      if (req.file) {
+        therapistData.license.licenseDocument = req.file.originalname;
+      }
+
+      const { therapist, ocrDetails } = await TherapistVerificationService.registerTherapist(
+        user._id, therapistData, fileBuffer, fileMimetype
       );
 
-      // Generate JWT token
       const jwt = require('jsonwebtoken');
-      const token = jwt.sign(
-        { userId: user._id },
-        process.env.JWT_SECRET,
-        { expiresIn: '7d' }
-      );
+      const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET, { expiresIn: '7d' });
 
       res.status(201).json({
         message: 'Therapist registered successfully',
         token,
-        user: {
-          id: user._id,
-          name: user.name,
-          email: user.email,
-          role: user.role
-        },
+        user: { id: user._id, name: user.name, email: user.email, role: user.role },
         verification: {
           status: therapist.verification.status,
-          notes: therapist.verification.notes
-        }
+          notes: therapist.verification.notes,
+          ocrDetails,
+        },
       });
     } catch (error) {
-      res.status(500).json({
-        message: 'Failed to register therapist',
-        error: error.message
-      });
+      console.error('[registerTherapist]', error);
+      res.status(500).json({ message: 'Failed to register therapist', error: error.message });
     }
   }
 
   /**
-   * Get verification status
-   * GET /api/therapist/verification-status
-   */
-  static async getVerificationStatus(req, res) {
-    try {
-      const therapist = await Therapist.findOne({ userId: req.user._id });
-
-      if (!therapist) {
-        return res.status(404).json({
-          message: 'Therapist profile not found'
-        });
-      }
-
-      const details = TherapistVerificationService.getVerificationDetails(therapist);
-
-      res.json({
-        message: 'Verification status retrieved',
-        verification: details
-      });
-    } catch (error) {
-      res.status(500).json({
-        message: 'Failed to get verification status',
-        error: error.message
-      });
-    }
-  }
-
-  /**
-   * Re-upload license and re-verify
    * POST /api/therapist/reupload-license
+   * Accepts multipart/form-data
    */
   static async reuploadLicense(req, res) {
     try {
-      const { licenseNumber, issuingAuthority, licenseExpiryDate, licenseDocument } = req.body;
+      const { licenseNumber, issuingAuthority, licenseExpiryDate } = req.body;
 
-      // Validate required fields
-      if (!licenseNumber || !issuingAuthority || !licenseExpiryDate || !licenseDocument) {
-        return res.status(400).json({
-          message: 'All license fields are required'
-        });
+      if (!licenseNumber || !issuingAuthority || !licenseExpiryDate) {
+        return res.status(400).json({ message: 'licenseNumber, issuingAuthority, and licenseExpiryDate are required' });
       }
 
-      const therapist = await TherapistVerificationService.reuploadLicense(
-        req.user._id,
-        {
-          licenseNumber,
-          issuingAuthority,
-          licenseExpiryDate: new Date(licenseExpiryDate),
-          licenseDocument
-        }
+      if (!req.file) {
+        return res.status(400).json({ message: 'License document file is required' });
+      }
+
+      const licenseData = {
+        licenseNumber,
+        issuingAuthority,
+        licenseExpiryDate: new Date(licenseExpiryDate),
+        licenseDocument: req.file.originalname,
+      };
+
+      const { therapist, ocrDetails } = await TherapistVerificationService.reuploadLicense(
+        req.user._id, licenseData, req.file.buffer, req.file.mimetype
       );
 
       const details = TherapistVerificationService.getVerificationDetails(therapist);
 
       res.json({
         message: 'License re-uploaded and re-verification completed',
-        verification: details
+        verification: { ...details, ocrDetails },
       });
     } catch (error) {
-      res.status(500).json({
-        message: 'Failed to re-upload license',
-        error: error.message
-      });
+      console.error('[reuploadLicense]', error);
+      res.status(500).json({ message: 'Failed to re-upload license', error: error.message });
     }
   }
 
   /**
-   * Get therapist profile
+   * GET /api/therapist/verification-status
+   */
+  static async getVerificationStatus(req, res) {
+    try {
+      const therapist = await Therapist.findOne({ userId: req.user._id });
+      if (!therapist) return res.status(404).json({ message: 'Therapist profile not found' });
+      res.json({ message: 'Verification status retrieved', verification: TherapistVerificationService.getVerificationDetails(therapist) });
+    } catch (error) {
+      res.status(500).json({ message: 'Failed to get verification status', error: error.message });
+    }
+  }
+
+  /**
    * GET /api/therapist/profile
    */
   static async getProfile(req, res) {
     try {
-      const therapist = await Therapist.findOne({ userId: req.user._id })
-        .populate('userId', 'name email phone profileImage');
-
-      if (!therapist) {
-        return res.status(404).json({
-          message: 'Therapist profile not found'
-        });
-      }
-
-      res.json({
-        therapist,
-        isEligible: TherapistVerificationService.isEligibleForService(therapist)
-      });
+      const therapist = await Therapist.findOne({ userId: req.user._id }).populate('userId', 'name email phone profileImage');
+      if (!therapist) return res.status(404).json({ message: 'Therapist profile not found' });
+      res.json({ therapist, isEligible: TherapistVerificationService.isEligibleForService(therapist) });
     } catch (error) {
-      res.status(500).json({
-        message: 'Failed to get profile',
-        error: error.message
-      });
+      res.status(500).json({ message: 'Failed to get profile', error: error.message });
     }
   }
 
   /**
-   * Update therapist profile
    * PUT /api/therapist/profile
    */
   static async updateProfile(req, res) {
     try {
-      const updates = req.body;
-      const allowedUpdates = [
-        'specialization', 'experienceYears', 'bio', 'workplace',
-        'hourlyRate', 'availability', 'languages'
-      ];
-
-      const filteredUpdates = {};
-      Object.keys(updates).forEach(key => {
-        if (allowedUpdates.includes(key)) {
-          filteredUpdates[key] = updates[key];
-        }
-      });
-
-      const therapist = await Therapist.findOneAndUpdate(
-        { userId: req.user._id },
-        filteredUpdates,
-        { new: true }
-      );
-
-      if (!therapist) {
-        return res.status(404).json({
-          message: 'Therapist profile not found'
-        });
-      }
-
-      res.json({
-        message: 'Profile updated successfully',
-        therapist
-      });
+      const allowed = ['specialization', 'experienceYears', 'bio', 'workplace', 'hourlyRate', 'availability', 'languages'];
+      const updates = {};
+      Object.keys(req.body).forEach(k => { if (allowed.includes(k)) updates[k] = req.body[k]; });
+      const therapist = await Therapist.findOneAndUpdate({ userId: req.user._id }, updates, { new: true });
+      if (!therapist) return res.status(404).json({ message: 'Therapist profile not found' });
+      res.json({ message: 'Profile updated successfully', therapist });
     } catch (error) {
-      res.status(500).json({
-        message: 'Failed to update profile',
-        error: error.message
-      });
+      res.status(500).json({ message: 'Failed to update profile', error: error.message });
     }
   }
 
   /**
-   * Get appointments
    * GET /api/therapist/appointments
    */
   static async getAppointments(req, res) {
     try {
       const Appointment = require('../models/Appointment');
-
       const appointments = await Appointment.find({ therapistId: req.user._id })
         .populate('clientId', 'name email phone')
         .sort({ date: -1, time: -1 });
-
       res.json(appointments);
     } catch (error) {
-      res.status(500).json({
-        message: 'Failed to get appointments',
-        error: error.message
-      });
+      res.status(500).json({ message: 'Failed to get appointments', error: error.message });
     }
   }
 
   /**
-   * Update availability
    * PUT /api/therapist/availability
    */
   static async updateAvailability(req, res) {
     try {
-      const { availability } = req.body;
-
       const therapist = await Therapist.findOneAndUpdate(
-        { userId: req.user._id },
-        { availability },
-        { new: true }
+        { userId: req.user._id }, { availability: req.body.availability }, { new: true }
       );
-
-      if (!therapist) {
-        return res.status(404).json({
-          message: 'Therapist profile not found'
-        });
-      }
-
-      res.json({
-        message: 'Availability updated successfully',
-        availability: therapist.availability
-      });
+      if (!therapist) return res.status(404).json({ message: 'Therapist profile not found' });
+      res.json({ message: 'Availability updated successfully', availability: therapist.availability });
     } catch (error) {
-      res.status(500).json({
-        message: 'Failed to update availability',
-        error: error.message
-      });
+      res.status(500).json({ message: 'Failed to update availability', error: error.message });
     }
   }
 
   /**
-   * Get therapist reviews
    * GET /api/therapist/reviews
    */
   static async getReviews(req, res) {
     try {
       const Review = require('../models/Review');
-
       const reviews = await Review.find({ therapistId: req.user._id })
         .populate('clientId', 'name')
         .populate('appointmentId', 'date sessionType')
         .sort({ createdAt: -1 });
-
       const totalReviews = reviews.length;
       const averageRating = totalReviews > 0
-        ? reviews.reduce((sum, review) => sum + review.rating, 0) / totalReviews
-        : 0;
-
-      res.json({
-        reviews,
-        stats: {
-          totalReviews,
-          averageRating: Math.round(averageRating * 10) / 10
-        }
-      });
+        ? reviews.reduce((s, r) => s + r.rating, 0) / totalReviews : 0;
+      res.json({ reviews, stats: { totalReviews, averageRating: Math.round(averageRating * 10) / 10 } });
     } catch (error) {
-      res.status(500).json({
-        message: 'Failed to get reviews',
-        error: error.message
-      });
+      res.status(500).json({ message: 'Failed to get reviews', error: error.message });
     }
   }
 }

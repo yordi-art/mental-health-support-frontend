@@ -2,215 +2,224 @@ const Therapist = require('../models/Therapist');
 const User = require('../models/User');
 const { notify } = require('./notificationService');
 const { sendEmail } = require('./emailService');
+const ocrService = require('./ocrService');
+const { extractLicenseData } = require('./licenseExtractor');
+const { validateLicenseData } = require('./licenseValidator');
 
 /**
- * Therapist License Verification Service
- * 
- * This system performs preliminary digital verification and does not replace 
- * official licensing by the Ministry of Health or regulatory authorities in Ethiopia.
- * 
- * Verification Status:
- * - VERIFIED: All criteria met
- * - PENDING: Awaiting verification
- * - REJECTED: Critical data missing or invalid
- * - EXPIRED: License has expired
+ * Therapist Verification Service
+ *
+ * Verification pipeline:
+ *  1. Rule-based checks (expiry, education, authority, competency)
+ *  2. OCR extraction from uploaded document (if file buffer provided)
+ *  3. Cross-validation of OCR data vs user input
+ *  4. Final decision
  */
 
 class TherapistVerificationService {
-  /**
-   * Verify therapist based on Ethiopian licensing practices
-   * 
-   * Requirements:
-   * 1. Valid degree (Psychology, Clinical Psychology, Social Work)
-   * 2. Valid license number
-   * 3. Issuing authority (Ministry of Health or Regional Bureau)
-   * 4. License not expired
-   * 5. Competency exam (COC or equivalent)
-   */
-  static async verifyTherapist(therapistData) {
-    try {
-      const therapist = therapistData;
 
-      // Step 1: Check if license is expired
-      const now = new Date();
-      const expiryDate = new Date(therapist.license.licenseExpiryDate);
+  // ─── Step 1: Rule-based checks ─────────────────────────────────────────────
 
-      if (expiryDate < now) {
-        return {
-          status: 'EXPIRED',
-          notes: 'License has expired',
-          verifiedAt: new Date()
-        };
-      }
+  static _runRuleChecks(therapist) {
+    const now = new Date();
+    const expiryDate = new Date(therapist.license.licenseExpiryDate);
 
-      // Step 2: Validate education
-      const validDegrees = ['Psychology', 'Clinical Psychology', 'Social Work'];
-      const isValidEducation = validDegrees.includes(therapist.education.field);
+    if (expiryDate < now) {
+      return { status: 'EXPIRED', notes: 'License has expired. Please renew your license.' };
+    }
 
-      if (!isValidEducation) {
-        return {
-          status: 'REJECTED',
-          notes: 'Invalid educational qualification. Must be Psychology, Clinical Psychology, or Social Work',
-          verifiedAt: new Date()
-        };
-      }
+    const validFields = ['Psychology', 'Clinical Psychology', 'Social Work'];
+    if (!validFields.includes(therapist.education.field)) {
+      return { status: 'REJECTED', notes: 'Invalid educational qualification. Must be Psychology, Clinical Psychology, or Social Work.' };
+    }
 
-      // Step 3: Validate license information
-      if (!therapist.license.licenseNumber || therapist.license.licenseNumber.trim().length === 0) {
-        return {
-          status: 'REJECTED',
-          notes: 'Invalid license number',
-          verifiedAt: new Date()
-        };
-      }
+    if (!therapist.license.licenseNumber?.trim()) {
+      return { status: 'REJECTED', notes: 'License number is missing or invalid.' };
+    }
 
-      // Step 4: Validate issuing authority
-      const validAuthorities = ['Ministry of Health', 'Regional Bureau of Health', 'Other'];
-      if (!validAuthorities.includes(therapist.license.issuingAuthority)) {
-        return {
-          status: 'REJECTED',
-          notes: 'Invalid issuing authority',
-          verifiedAt: new Date()
-        };
-      }
+    const validAuthorities = ['Ministry of Health', 'Regional Bureau of Health', 'Other'];
+    if (!validAuthorities.includes(therapist.license.issuingAuthority)) {
+      return { status: 'REJECTED', notes: 'Invalid issuing authority.' };
+    }
 
-      // Step 5: Check competency (COC or exam passed)
-      const hasCompetency = therapist.competency.hasCOC || therapist.competency.examPassed;
+    const hasCompetency = therapist.competency?.hasCOC || therapist.competency?.examPassed;
+    if (!hasCompetency) {
+      return { status: 'PENDING', notes: 'Awaiting competency certification (COC or licensing exam).' };
+    }
 
-      if (!hasCompetency) {
-        return {
-          status: 'PENDING',
-          notes: 'Awaiting competency exam results (COC or equivalent)',
-          verifiedAt: new Date()
-        };
-      }
+    return null; // all rule checks passed
+  }
 
-      // Step 6: Check required documents
-      if (!therapist.license.licenseDocument) {
-        return {
-          status: 'PENDING',
-          notes: 'Awaiting license document upload',
-          verifiedAt: new Date()
-        };
-      }
+  // ─── Step 2 & 3: OCR pipeline ──────────────────────────────────────────────
 
-      // All criteria met - VERIFIED
+  static async _runOCRVerification(fileBuffer, fileMimetype, licenseInput) {
+    // No file provided — skip OCR
+    if (!fileBuffer) {
       return {
-        status: 'VERIFIED',
-        notes: 'Successfully verified as a licensed mental health professional',
-        verifiedAt: new Date()
+        ocrAttempted: false,
+        decision: 'PENDING',
+        notes: 'No license document uploaded. Please upload your license image or PDF.',
+        ocrDetails: null,
       };
-    } catch (error) {
+    }
+
+    try {
+      // Extract text via Google Vision
+      const ocrResult = await ocrService.extractText({ buffer: fileBuffer, mimetype: fileMimetype, size: fileBuffer.length });
+
+      if (!ocrResult.success) {
+        return {
+          ocrAttempted: true,
+          decision: 'PENDING',
+          notes: `Unable to read document: ${ocrResult.error}. Please upload a clearer image.`,
+          ocrDetails: { success: false, error: ocrResult.error },
+        };
+      }
+
+      // Parse structured fields from raw text
+      const extracted = extractLicenseData(ocrResult.text);
+
+      // Validate extracted data against user input
+      const validation = validateLicenseData(extracted, licenseInput, ocrResult.confidence);
+
       return {
-        status: 'REJECTED',
-        notes: `Verification error: ${error.message}`,
-        verifiedAt: new Date()
+        ocrAttempted: true,
+        decision: validation.decision,   // 'OCR_PASSED' | 'REJECTED' | 'PENDING'
+        notes: validation.notes,
+        ocrDetails: {
+          success: true,
+          confidence: ocrResult.confidence,
+          wordCount: ocrResult.wordCount,
+          extractedFields: extracted.extractedFields,
+          unextracted: extracted.unmatched,
+          checks: validation.checks,
+          mismatches: validation.mismatches,
+        },
+      };
+    } catch (err) {
+      // OCR service unavailable (e.g. no credentials) — degrade gracefully
+      console.warn('[OCR] Service unavailable:', err.message);
+      return {
+        ocrAttempted: true,
+        decision: 'PENDING',
+        notes: 'Automatic document verification is temporarily unavailable. Your submission has been queued for manual review.',
+        ocrDetails: { success: false, error: err.message },
       };
     }
   }
 
+  // ─── Main verification entry point ─────────────────────────────────────────
+
   /**
-   * Register new therapist
-   * Sets initial status to PENDING and runs verification
+   * @param {object} therapistDoc  - Mongoose Therapist document
+   * @param {Buffer} [fileBuffer]  - raw file buffer from multer
+   * @param {string} [fileMimetype]
+   * @returns {object} { status, notes, verifiedAt, ocrDetails }
    */
-  static async registerTherapist(userId, therapistData) {
-    try {
-      // Create new therapist record with PENDING status
-      const therapist = new Therapist({
-        userId,
-        specialization: therapistData.specialization,
-        experienceYears: therapistData.experienceYears,
-        bio: therapistData.bio,
-        workplace: therapistData.workplace,
-        education: therapistData.education,
-        license: therapistData.license,
-        competency: therapistData.competency,
-        languages: therapistData.languages,
-        hourlyRate: therapistData.hourlyRate,
-        verification: {
-          status: 'PENDING',
-          notes: 'Initial registration - pending verification',
-          verifiedAt: null
-        }
-      });
-
-      // Run automatic verification
-      const verificationResult = await this.verifyTherapist(therapist);
-
-      // Update verification status
-      therapist.verification = verificationResult;
-
-      // Save to database
-      await therapist.save();
-
-      // Notify therapist of verification result
-      const user = await User.findById(userId);
-      if (user) {
-        await notify(userId, `Verification status: ${verificationResult.status} — ${verificationResult.notes}`, 'verification_status', therapist._id);
-        sendEmail(user.email, 'therapistVerification', { name: user.name, status: verificationResult.status, notes: verificationResult.notes });
-      }
-
-      return therapist;
-    } catch (error) {
-      throw new Error(`Failed to register therapist: ${error.message}`);
+  static async verifyTherapist(therapistDoc, fileBuffer = null, fileMimetype = null) {
+    // Step 1 — rule checks
+    const ruleFailure = this._runRuleChecks(therapistDoc);
+    if (ruleFailure) {
+      return { ...ruleFailure, verifiedAt: new Date(), ocrDetails: null };
     }
+
+    // Step 2 & 3 — OCR
+    const ocr = await this._runOCRVerification(fileBuffer, fileMimetype, {
+      licenseNumber: therapistDoc.license.licenseNumber,
+      issuingAuthority: therapistDoc.license.issuingAuthority,
+      licenseExpiryDate: therapistDoc.license.licenseExpiryDate,
+    });
+
+    // Step 4 — final decision
+    let status, notes;
+
+    if (ocr.decision === 'OCR_PASSED') {
+      status = 'VERIFIED';
+      notes = 'Successfully verified as a licensed mental health professional. Document OCR confirmed.';
+    } else if (ocr.decision === 'REJECTED') {
+      status = 'REJECTED';
+      notes = ocr.notes;
+    } else {
+      // PENDING — OCR skipped, low confidence, or partial extraction
+      status = 'PENDING';
+      notes = ocr.notes;
+    }
+
+    return { status, notes, verifiedAt: new Date(), ocrDetails: ocr.ocrDetails };
   }
 
-  /**
-   * Re-upload license and re-verify
-   */
-  static async reuploadLicense(userId, licenseData) {
-    try {
-      const therapist = await Therapist.findOne({ userId });
+  // ─── Register new therapist ─────────────────────────────────────────────────
 
-      if (!therapist) {
-        throw new Error('Therapist not found');
-      }
+  static async registerTherapist(userId, therapistData, fileBuffer = null, fileMimetype = null) {
+    const therapist = new Therapist({
+      userId,
+      specialization: therapistData.specialization,
+      experienceYears: therapistData.experienceYears,
+      bio: therapistData.bio,
+      workplace: therapistData.workplace,
+      education: therapistData.education,
+      license: therapistData.license,
+      competency: therapistData.competency,
+      languages: therapistData.languages,
+      hourlyRate: therapistData.hourlyRate,
+      verification: { status: 'PENDING', notes: 'Verification in progress...', verifiedAt: null },
+    });
 
-      // Update license information
-      therapist.license = {
-        ...therapist.license,
-        ...licenseData
-      };
+    const result = await this.verifyTherapist(therapist, fileBuffer, fileMimetype);
 
-      // Reset status to PENDING for re-verification
-      therapist.verification.status = 'PENDING';
-      therapist.verification.notes = 'License re-uploaded - re-verification in progress';
-      therapist.verification.verifiedAt = null;
+    therapist.verification = {
+      status: result.status,
+      notes: result.notes,
+      verifiedAt: result.verifiedAt,
+    };
 
-      await therapist.save();
+    await therapist.save();
 
-      // Run verification
-      const verificationResult = await this.verifyTherapist(therapist);
-
-      // Update verification status
-      therapist.verification = verificationResult;
-      await therapist.save();
-
-      return therapist;
-    } catch (error) {
-      throw new Error(`Failed to re-upload license: ${error.message}`);
+    // Notify
+    const user = await User.findById(userId);
+    if (user) {
+      await notify(userId, `Verification status: ${result.status} — ${result.notes}`, 'verification_status', therapist._id);
+      sendEmail(user.email, 'therapistVerification', { name: user.name, status: result.status, notes: result.notes });
     }
+
+    return { therapist, ocrDetails: result.ocrDetails };
   }
 
-  /**
-   * Check if therapist is eligible for appointments
-   * Only VERIFIED therapists can be booked
-   */
+  // ─── Re-upload and re-verify ────────────────────────────────────────────────
+
+  static async reuploadLicense(userId, licenseData, fileBuffer = null, fileMimetype = null) {
+    const therapist = await Therapist.findOne({ userId });
+    if (!therapist) throw new Error('Therapist not found');
+
+    therapist.license = { ...therapist.license.toObject(), ...licenseData };
+    therapist.verification = { status: 'PENDING', notes: 'Re-verification in progress...', verifiedAt: null };
+    await therapist.save();
+
+    const result = await this.verifyTherapist(therapist, fileBuffer, fileMimetype);
+
+    therapist.verification = {
+      status: result.status,
+      notes: result.notes,
+      verifiedAt: result.verifiedAt,
+    };
+    await therapist.save();
+
+    return { therapist, ocrDetails: result.ocrDetails };
+  }
+
+  // ─── Helpers ────────────────────────────────────────────────────────────────
+
   static isEligibleForService(therapist) {
     return therapist.verification.status === 'VERIFIED';
   }
 
-  /**
-   * Get verification status details
-   */
   static getVerificationDetails(therapist) {
     return {
       status: therapist.verification.status,
       notes: therapist.verification.notes,
       verifiedAt: therapist.verification.verifiedAt,
       licenseExpiryDate: therapist.license.licenseExpiryDate,
-      isEligible: this.isEligibleForService(therapist)
+      isEligible: this.isEligibleForService(therapist),
     };
   }
 }

@@ -75,37 +75,37 @@ export default function TherapistRegisterPage() {
     setSubmitting(true);
     setError('');
     try {
-      const res = await therapistAPI.register({
-        name: form.fullName,
-        email: form.email,
-        password: form.password,
-        phone: form.phone,
-        gender: form.gender,
-        dateOfBirth: form.dob,
-        therapistData: {
-          specialization: form.specialization.split(',').map(s => s.trim()).filter(Boolean),
-          experienceYears: Number(form.experience) || 0,
-          bio: form.bio,
-          workplace: form.workplace,
-          hourlyRate: Number(form.hourlyRate) || 500,
-          education: {
-            degreeType: form.degreeType,
-            field: form.field,
-            institution: form.institution,
-            graduationYear: Number(form.graduationYear) || new Date().getFullYear(),
-          },
-          license: {
-            licenseNumber: form.licenseNumber,
-            issuingAuthority: form.issuingAuthority,
-            licenseExpiryDate: form.expiryDate,
-            licenseDocument: form.licenseFile ? form.licenseFile.name : 'uploaded',
-          },
-          competency: {
-            hasCOC: form.hasCOC,
-            examPassed: form.examPassed,
-          },
+      // Build FormData so the license image is sent as a real file
+      const fd = new FormData();
+      fd.append('name', form.fullName);
+      fd.append('email', form.email);
+      fd.append('password', form.password);
+      fd.append('phone', form.phone);
+      fd.append('gender', form.gender);
+      fd.append('dateOfBirth', form.dob);
+      fd.append('therapistData', JSON.stringify({
+        specialization: form.specialization.split(',').map(s => s.trim()).filter(Boolean),
+        experienceYears: Number(form.experience) || 0,
+        bio: form.bio,
+        workplace: form.workplace,
+        hourlyRate: Number(form.hourlyRate) || 500,
+        education: {
+          degreeType: form.degreeType,
+          field: form.field,
+          institution: form.institution,
+          graduationYear: Number(form.graduationYear) || new Date().getFullYear(),
         },
-      });
+        license: {
+          licenseNumber: form.licenseNumber,
+          issuingAuthority: form.issuingAuthority,
+          licenseExpiryDate: form.expiryDate,
+          licenseDocument: form.licenseFile ? form.licenseFile.name : '',
+        },
+        competency: { hasCOC: form.hasCOC, examPassed: form.examPassed },
+      }));
+      if (form.licenseFile) fd.append('licenseDocument', form.licenseFile);
+
+      const res = await therapistAPI.register(fd);
 
       const { token, user, verification } = res.data;
       const stored = { ...user, token };
