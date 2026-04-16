@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Heart, Upload, CheckCircle, XCircle, AlertTriangle, Clock } from 'lucide-react';
 import { therapistAPI } from '../../api';
 
-const steps = ['Basic Info', 'Professional Info', 'License Verification'];
+const steps = ['Basic Info', 'Professional Info', 'Education', 'License & Submit'];
 
 function ProgressBar({ current }) {
   return (
@@ -24,22 +24,19 @@ function ProgressBar({ current }) {
 
 function VerificationResult({ status, navigate }) {
   const configs = {
-    VERIFIED: { icon: CheckCircle, color: 'text-teal-500', bg: 'bg-teal-50', title: 'Verification Successful!', desc: 'Your license has been verified. You can now access your therapist dashboard.' },
-    REJECTED: { icon: XCircle, color: 'text-red-500', bg: 'bg-red-50', title: 'Verification Failed', desc: 'We could not verify your license. Please check your details and re-upload.' },
-    PENDING:  { icon: Clock, color: 'text-yellow-500', bg: 'bg-yellow-50', title: 'Under Verification', desc: 'Your submission is being reviewed. You will be notified once the process is complete.' },
-    EXPIRED:  { icon: AlertTriangle, color: 'text-orange-500', bg: 'bg-orange-50', title: 'License Expired', desc: 'Your license appears to be expired. Please renew and re-upload.' },
+    VERIFIED: { icon: CheckCircle, color: 'text-teal-500', bg: 'bg-teal-50', title: 'Verification Successful!',   desc: 'Your license has been verified. You can now access your therapist dashboard.' },
+    REJECTED: { icon: XCircle,     color: 'text-red-500',   bg: 'bg-red-50',   title: 'Verification Failed',       desc: 'We could not verify your license. Please re-upload with correct details.' },
+    PENDING:  { icon: Clock,       color: 'text-yellow-500',bg: 'bg-yellow-50',title: 'Under Verification',        desc: 'Your submission is being reviewed. You will be notified once complete.' },
+    EXPIRED:  { icon: AlertTriangle,color:'text-orange-500',bg: 'bg-orange-50',title: 'License Expired',           desc: 'Your license appears expired. Please renew and re-upload.' },
   };
   const c = configs[status] || configs.PENDING;
-
   return (
     <div className={`text-center py-10 rounded-2xl ${c.bg} p-8`}>
       <c.icon size={48} className={`${c.color} mx-auto mb-4`} />
       <h3 className="font-bold text-xl text-slate-800 mb-2">{c.title}</h3>
       <p className="text-sm text-gray-600 mb-6">{c.desc}</p>
-      <button
-        onClick={() => navigate('/therapist/dashboard')}
-        className="bg-primary text-white px-6 py-2.5 rounded-xl font-semibold hover:bg-blue-600 transition"
-      >
+      <button onClick={() => navigate('/therapist/dashboard')}
+        className="bg-primary text-white px-6 py-2.5 rounded-xl font-semibold hover:bg-blue-600 transition">
         Go to Dashboard →
       </button>
     </div>
@@ -58,11 +55,15 @@ export default function TherapistRegisterPage() {
   const [error, setError] = useState('');
 
   const [form, setForm] = useState({
-    fullName: basic.name || '',
-    email: basic.email || '',
-    password: basic.password || '',
+    // Step 0 — Basic
+    fullName: basic.name || '', email: basic.email || '', password: basic.password || '',
     phone: '', gender: '', dob: '',
-    profession: 'therapist', specialization: '', experience: '', workplace: '', bio: '',
+    // Step 1 — Professional
+    specialization: '', experience: '', workplace: '', bio: '', hourlyRate: '',
+    // Step 2 — Education
+    degreeType: '', field: '', institution: '', graduationYear: '',
+    hasCOC: false, examPassed: false,
+    // Step 3 — License
     licenseNumber: '', issuingAuthority: '', issueDate: '', expiryDate: '', licenseFile: null,
   });
 
@@ -80,16 +81,27 @@ export default function TherapistRegisterPage() {
         gender: form.gender,
         dateOfBirth: form.dob,
         therapistData: {
-          profession: form.profession,
-          specialization: [form.specialization],
-          experienceYears: Number(form.experience),
-          workplace: form.workplace,
+          specialization: form.specialization.split(',').map(s => s.trim()).filter(Boolean),
+          experienceYears: Number(form.experience) || 0,
           bio: form.bio,
-          licenseNumber: form.licenseNumber,
-          issuingAuthority: form.issuingAuthority,
-          licenseIssueDate: form.issueDate,
-          licenseExpiryDate: form.expiryDate,
-          licenseDocument: form.licenseFile ? form.licenseFile.name : '',
+          workplace: form.workplace,
+          hourlyRate: Number(form.hourlyRate) || 500,
+          education: {
+            degreeType: form.degreeType,
+            field: form.field,
+            institution: form.institution,
+            graduationYear: Number(form.graduationYear) || new Date().getFullYear(),
+          },
+          license: {
+            licenseNumber: form.licenseNumber,
+            issuingAuthority: form.issuingAuthority,
+            licenseExpiryDate: form.expiryDate,
+            licenseDocument: form.licenseFile ? form.licenseFile.name : 'uploaded',
+          },
+          competency: {
+            hasCOC: form.hasCOC,
+            examPassed: form.examPassed,
+          },
         },
       });
 
@@ -98,7 +110,7 @@ export default function TherapistRegisterPage() {
       sessionStorage.removeItem('therapistBasic');
       setResult(verification?.status || 'PENDING');
     } catch (err) {
-      setError(err.response?.data?.message || 'Registration failed. Please try again.');
+      setError(err.response?.data?.message || err.response?.data?.error || 'Registration failed. Please check all fields.');
     } finally {
       setSubmitting(false);
     }
@@ -116,12 +128,11 @@ export default function TherapistRegisterPage() {
         </div>
 
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
-          {result ? (
-            <VerificationResult status={result} navigate={navigate} />
-          ) : (
+          {result ? <VerificationResult status={result} navigate={navigate} /> : (
             <>
               <ProgressBar current={step} />
 
+              {/* Step 0 — Basic Info */}
               {step === 0 && (
                 <div className="space-y-4">
                   <h3 className="font-semibold text-slate-700 mb-4">Basic Information</h3>
@@ -131,23 +142,27 @@ export default function TherapistRegisterPage() {
                     <div><label className="text-xs font-medium text-gray-600 block mb-1">Password</label><input type="password" {...f('password')} placeholder="••••••••" className={inputCls} /></div>
                     <div><label className="text-xs font-medium text-gray-600 block mb-1">Phone</label><input {...f('phone')} placeholder="+251 9XX XXX XXX" className={inputCls} /></div>
                     <div><label className="text-xs font-medium text-gray-600 block mb-1">Gender</label>
-                      <select {...f('gender')} className={inputCls}><option value="">Select</option><option>Female</option><option>Male</option><option>Other</option></select>
+                      <select {...f('gender')} className={inputCls}>
+                        <option value="">Select gender</option>
+                        <option value="female">Female</option>
+                        <option value="male">Male</option>
+                        <option value="other">Other</option>
+                      </select>
                     </div>
                     <div><label className="text-xs font-medium text-gray-600 block mb-1">Date of Birth</label><input type="date" {...f('dob')} className={inputCls} /></div>
                   </div>
                 </div>
               )}
 
+              {/* Step 1 — Professional Info */}
               {step === 1 && (
                 <div className="space-y-4">
                   <h3 className="font-semibold text-slate-700 mb-4">Professional Information</h3>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div><label className="text-xs font-medium text-gray-600 block mb-1">Profession</label>
-                      <select {...f('profession')} className={inputCls}><option value="therapist">Therapist</option><option value="counselor">Counselor</option></select>
-                    </div>
-                    <div><label className="text-xs font-medium text-gray-600 block mb-1">Specialization</label><input {...f('specialization')} placeholder="e.g. Anxiety & Depression" className={inputCls} /></div>
-                    <div><label className="text-xs font-medium text-gray-600 block mb-1">Years of Experience</label><input type="number" {...f('experience')} placeholder="5" className={inputCls} /></div>
-                    <div><label className="text-xs font-medium text-gray-600 block mb-1">Workplace / Institution</label><input {...f('workplace')} placeholder="AAU Medical Center" className={inputCls} /></div>
+                    <div className="sm:col-span-2"><label className="text-xs font-medium text-gray-600 block mb-1">Specialization <span className="text-gray-400">(comma-separated)</span></label><input {...f('specialization')} placeholder="Anxiety & Depression, Trauma, PTSD" className={inputCls} /></div>
+                    <div><label className="text-xs font-medium text-gray-600 block mb-1">Years of Experience</label><input type="number" min="0" {...f('experience')} placeholder="5" className={inputCls} /></div>
+                    <div><label className="text-xs font-medium text-gray-600 block mb-1">Hourly Rate (ETB)</label><input type="number" min="0" {...f('hourlyRate')} placeholder="800" className={inputCls} /></div>
+                    <div className="sm:col-span-2"><label className="text-xs font-medium text-gray-600 block mb-1">Workplace / Institution</label><input {...f('workplace')} placeholder="AAU Medical Center" className={inputCls} /></div>
                   </div>
                   <div><label className="text-xs font-medium text-gray-600 block mb-1">Professional Bio</label>
                     <textarea {...f('bio')} rows={3} placeholder="Brief description of your approach and expertise..." className={inputCls + ' resize-none'} />
@@ -155,15 +170,65 @@ export default function TherapistRegisterPage() {
                 </div>
               )}
 
+              {/* Step 2 — Education */}
               {step === 2 && (
+                <div className="space-y-4">
+                  <h3 className="font-semibold text-slate-700 mb-4">Education & Competency</h3>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div><label className="text-xs font-medium text-gray-600 block mb-1">Degree Type</label>
+                      <select {...f('degreeType')} className={inputCls}>
+                        <option value="">Select degree</option>
+                        <option value="Bachelor">Bachelor</option>
+                        <option value="Master">Master</option>
+                        <option value="Doctorate">Doctorate</option>
+                        <option value="Diploma">Diploma</option>
+                      </select>
+                    </div>
+                    <div><label className="text-xs font-medium text-gray-600 block mb-1">Field of Study</label>
+                      <select {...f('field')} className={inputCls}>
+                        <option value="">Select field</option>
+                        <option value="Psychology">Psychology</option>
+                        <option value="Clinical Psychology">Clinical Psychology</option>
+                        <option value="Social Work">Social Work</option>
+                        <option value="Counseling">Counseling</option>
+                        <option value="Other">Other</option>
+                      </select>
+                    </div>
+                    <div><label className="text-xs font-medium text-gray-600 block mb-1">Institution</label><input {...f('institution')} placeholder="Addis Ababa University" className={inputCls} /></div>
+                    <div><label className="text-xs font-medium text-gray-600 block mb-1">Graduation Year</label><input type="number" {...f('graduationYear')} placeholder="2018" className={inputCls} /></div>
+                  </div>
+                  <div className="bg-blue-50 rounded-xl p-4 space-y-3">
+                    <p className="text-xs font-semibold text-slate-700">Competency Certification</p>
+                    <label className="flex items-center gap-3 cursor-pointer">
+                      <input type="checkbox" checked={form.hasCOC} onChange={e => setForm({ ...form, hasCOC: e.target.checked })} className="w-4 h-4 accent-primary" />
+                      <span className="text-sm text-slate-700">I have a COC (Certificate of Competency)</span>
+                    </label>
+                    <label className="flex items-center gap-3 cursor-pointer">
+                      <input type="checkbox" checked={form.examPassed} onChange={e => setForm({ ...form, examPassed: e.target.checked })} className="w-4 h-4 accent-primary" />
+                      <span className="text-sm text-slate-700">I have passed the licensing exam</span>
+                    </label>
+                    <p className="text-xs text-gray-400">At least one competency certification is required for VERIFIED status.</p>
+                  </div>
+                </div>
+              )}
+
+              {/* Step 3 — License */}
+              {step === 3 && (
                 <div className="space-y-4">
                   <h3 className="font-semibold text-slate-700 mb-1">License Verification</h3>
                   <p className="text-xs text-gray-500 mb-4 bg-blue-50 p-3 rounded-xl">
-                    🔒 Your license will be automatically verified by our system. This process is secure and typically takes under 2 minutes.
+                    🔒 Your license will be automatically verified by our system against Ethiopian Health Authority records.
                   </p>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div><label className="text-xs font-medium text-gray-600 block mb-1">License Number</label><input {...f('licenseNumber')} placeholder="ETH-PSY-2024-XXXX" className={inputCls} /></div>
-                    <div><label className="text-xs font-medium text-gray-600 block mb-1">Issuing Authority</label><input {...f('issuingAuthority')} placeholder="Ethiopian Health Authority" className={inputCls} /></div>
+                    <div><label className="text-xs font-medium text-gray-600 block mb-1">Issuing Authority</label>
+                      <select {...f('issuingAuthority')} className={inputCls}>
+                        <option value="">Select authority</option>
+                        <option value="Ministry of Health">Ministry of Health</option>
+                        <option value="Regional Bureau of Health">Regional Bureau of Health</option>
+                        <option value="Other">Other</option>
+                      </select>
+                    </div>
                     <div><label className="text-xs font-medium text-gray-600 block mb-1">Issue Date</label><input type="date" {...f('issueDate')} className={inputCls} /></div>
                     <div><label className="text-xs font-medium text-gray-600 block mb-1">Expiry Date</label><input type="date" {...f('expiryDate')} className={inputCls} /></div>
                   </div>
