@@ -5,15 +5,16 @@ import DashboardLayout from '../../layouts/DashboardLayout';
 import { VerificationBadge } from '../../components/therapist/VerificationStatusBanner';
 import { therapistSidebarItems } from '../../components/therapist/therapistNav';
 import { therapistAPI } from '../../api';
+import { useAuth } from '../../context/AuthContext';
 
 const inputCls = 'w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30';
 
 export default function ReuploadVerificationPage() {
-  const user = JSON.parse(localStorage.getItem('mhUser') || '{}');
+  const { user, refetchVerification } = useAuth();
   const [file, setFile] = useState(null);
   const [form, setForm] = useState({ licenseNumber: '', authority: 'Ministry of Health', issueDate: '', expiryDate: '' });
   const [loading, setLoading] = useState(false);
-  const [result, setResult] = useState(null); // { status, notes }
+  const [result, setResult] = useState(null);
   const [error, setError] = useState('');
   const navigate = useNavigate();
 
@@ -31,13 +32,12 @@ export default function ReuploadVerificationPage() {
         licenseNumber: form.licenseNumber,
         issuingAuthority: form.authority,
         licenseExpiryDate: form.expiryDate,
-        // In production, upload file to storage and pass URL; here we pass filename as placeholder
         licenseDocument: file ? file.name : 'pending_upload',
       });
+      await refetchVerification();
       setResult(res.data.verification);
     } catch (err) {
-      // Fallback: simulate result for demo
-      setResult({ status: 'PENDING', notes: 'Re-verification submitted. You will receive an email with the result.' });
+      setError(err.response?.data?.message || 'Submission failed. Please try again.');
     } finally {
       setLoading(false);
     }

@@ -1,13 +1,14 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Heart, User, Mail, Lock, ChevronRight, Stethoscope, UserCircle } from 'lucide-react';
-import { authAPI } from '../../api';
+import { useAuth } from '../../context/AuthContext';
 
 export default function RegisterPage() {
   const [form, setForm] = useState({ name: '', email: '', password: '', role: 'client' });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const navigate = useNavigate();
+  const { register } = useAuth();
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -28,14 +29,12 @@ export default function RegisterPage() {
     }
 
     try {
-      const res = await authAPI.register({
+      await register({
         name: form.name,
         email: form.email,
         password: form.password,
         role: 'client',
       });
-      const { token, user } = res.data;
-      localStorage.setItem('mhUser', JSON.stringify({ ...user, token }));
       navigate('/client/dashboard');
     } catch (err) {
       setError(err.response?.data?.message || 'Registration failed. Please try again.');

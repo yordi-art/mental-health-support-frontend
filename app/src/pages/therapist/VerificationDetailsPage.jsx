@@ -5,9 +5,10 @@ import DashboardLayout from '../../layouts/DashboardLayout';
 import VerificationStatusBanner, { VerificationBadge } from '../../components/therapist/VerificationStatusBanner';
 import { therapistSidebarItems } from '../../components/therapist/therapistNav';
 import { therapistAPI } from '../../api';
+import { useAuth } from '../../context/AuthContext';
 
 export default function VerificationDetailsPage() {
-  const user = JSON.parse(localStorage.getItem('mhUser') || '{}');
+  const { user, refetchVerification } = useAuth();
   const [verification, setVerification] = useState(null);
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -21,10 +22,7 @@ export default function VerificationDetailsPage() {
         setVerification(vRes.data.verification);
         setProfile(pRes.data.therapist);
       })
-      .catch(() => {
-        // fallback mock so UI doesn't break without backend
-        setVerification({ status: 'PENDING', notes: 'Awaiting system verification.', verifiedAt: null });
-      })
+      .catch(() => {})
       .finally(() => setLoading(false));
   }, []);
 
@@ -121,7 +119,7 @@ export default function VerificationDetailsPage() {
           )}
           {status === 'PENDING' && (
             <button
-              onClick={() => window.location.reload()}
+              onClick={async () => { await refetchVerification(); window.location.reload(); }}
               className="flex items-center gap-2 border border-gray-200 text-gray-600 px-5 py-3 rounded-xl hover:bg-gray-50 transition text-sm"
             >
               <RefreshCw size={15} /> Refresh Status

@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Heart, Upload, CheckCircle, XCircle, AlertTriangle, Clock } from 'lucide-react';
 import { therapistAPI } from '../../api';
+import { useAuth } from '../../context/AuthContext';
 
 const steps = ['Basic Info', 'Professional Info', 'Education', 'License & Submit'];
 
@@ -47,6 +48,7 @@ const inputCls = 'w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm f
 
 export default function TherapistRegisterPage() {
   const navigate = useNavigate();
+  const { refetchVerification } = useAuth();
   const basic = JSON.parse(sessionStorage.getItem('therapistBasic') || '{}');
 
   const [step, setStep] = useState(0);
@@ -107,6 +109,7 @@ export default function TherapistRegisterPage() {
 
       const { token, user, verification } = res.data;
       localStorage.setItem('mhUser', JSON.stringify({ ...user, token }));
+      await refetchVerification();
       sessionStorage.removeItem('therapistBasic');
       setResult(verification?.status || 'PENDING');
     } catch (err) {
@@ -131,6 +134,16 @@ export default function TherapistRegisterPage() {
           {result ? <VerificationResult status={result} navigate={navigate} /> : (
             <>
               <ProgressBar current={step} />
+
+              {/* Verification requirements notice — always visible */}
+              <div className="bg-blue-50 border border-blue-100 rounded-xl p-4 mb-5 text-xs text-blue-800 space-y-1">
+                <p className="font-semibold text-sm text-primary mb-2">✅ Requirements for VERIFIED status:</p>
+                <p>• Education field must be: <strong>Psychology, Clinical Psychology, or Social Work</strong></p>
+                <p>• Issuing authority: <strong>Ministry of Health</strong> or <strong>Regional Bureau of Health</strong></p>
+                <p>• License must <strong>not be expired</strong></p>
+                <p>• Must have <strong>COC certificate</strong> OR <strong>passed licensing exam</strong></p>
+                <p>• License document must be <strong>uploaded</strong></p>
+              </div>
 
               {/* Step 0 — Basic Info */}
               {step === 0 && (

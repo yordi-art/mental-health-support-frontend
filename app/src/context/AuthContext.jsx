@@ -22,7 +22,7 @@ export function AuthProvider({ children }) {
     if (!stored?.token) { setLoading(false); return; }
     try {
       const res = await authAPI.getProfile();
-      const fresh = { ...res.data, token: stored.token };
+      const fresh = { ...(res.data.user || res.data), token: stored.token };
       setUser(fresh);
       localStorage.setItem('mhUser', JSON.stringify(fresh));
       if (fresh.role === 'therapist') await fetchVerification();
@@ -46,6 +46,15 @@ export function AuthProvider({ children }) {
     return u;
   };
 
+  const register = async (data) => {
+    const res = await authAPI.register(data);
+    const { token, user: u } = res.data;
+    const stored = { ...u, token };
+    localStorage.setItem('mhUser', JSON.stringify(stored));
+    setUser(stored);
+    return u;
+  };
+
   const logout = () => {
     localStorage.removeItem('mhUser');
     setUser(null);
@@ -53,7 +62,7 @@ export function AuthProvider({ children }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, verificationStatus, loading, login, logout, refetchVerification: fetchVerification }}>
+    <AuthContext.Provider value={{ user, verificationStatus, loading, login, logout, register, refetchVerification: fetchVerification }}>
       {children}
     </AuthContext.Provider>
   );

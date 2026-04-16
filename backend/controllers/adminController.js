@@ -28,7 +28,7 @@ class AdminController {
           { $match: { status: 'paid' } },
           { $group: { _id: null, total: { $sum: '$amount' } } }
         ]),
-        require('../models/Therapist').countDocuments({ verificationStatus: 'pending' }),
+        require('../models/Therapist').countDocuments({ 'verification.status': 'PENDING' }),
         Issue.countDocuments({ status: 'open' })
       ]);
 
