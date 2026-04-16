@@ -3,6 +3,7 @@ const TherapistController = require('../controllers/therapistController');
 const AppointmentController = require('../controllers/appointmentController');
 const auth = require('../middleware/auth');
 const roleAuth = require('../middleware/roleAuth');
+const verifiedTherapistOnly = require('../middleware/verifiedTherapistOnly');
 
 const router = express.Router();
 
@@ -90,12 +91,12 @@ router.put('/profile', TherapistController.updateProfile);
 router.get('/verification-status', TherapistController.getVerificationStatus);
 router.post('/reupload-license', TherapistController.reuploadLicense);
 
-// Appointments
-router.get('/appointments', TherapistController.getAppointments);
-router.put('/appointments/:id/status', AppointmentController.updateAppointmentStatus);
+// Appointments (VERIFIED only)
+router.get('/appointments', verifiedTherapistOnly, TherapistController.getAppointments);
+router.put('/appointments/:id/status', verifiedTherapistOnly, AppointmentController.updateAppointmentStatus);
 
-// Availability
-router.put('/availability', TherapistController.updateAvailability);
+// Availability (VERIFIED only)
+router.put('/availability', verifiedTherapistOnly, TherapistController.updateAvailability);
 
 // Reviews
 router.get('/reviews', TherapistController.getReviews);

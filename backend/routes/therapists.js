@@ -1,74 +1,87 @@
 const express = require('express');
-const User = require('../models/User');
-const { auth } = require('../middleware/auth');
+const Therapist = require('../models/Therapist');
+const Review = require('../models/Review');
 
 const router = express.Router();
 
-// Get all therapists
+// GET /api/therapists — ONLY returns VERIFIED therapists (backend-enforced)
 router.get('/', async (req, res) => {
   try {
-    const { specialty, location } = req.query;
+    const { specialization, search } = req.query;
 
-    let query = { role: 'therapist', isVerified: true };
-
-    if (specialty) {
-      query.specialties = { $in: [specialty] };
+    // Step 1: find all VERIFIED therapist profiles
+    const therapistFilter = { 'verification.status': 'VERIFIED' };
+    if (specialization && specialization !== 'All') {
+      therapistFilter.specialization = { $in: [specialization] };
     }
 
-    if (location) {
-      query.location = { $regex: location, $options: 'i' };
-    }
+    const therapistProfiles = await Therapist.find(therapistFilter)
+      .populate('userId', 'name email profileImage isActive')
+      .lean();
 
-    const therapists = await User.find(query)
-      .select('-password -verificationDocuments')
-      .sort({ createdAt: -1 });
+    // Step 2: filter out inactive users and apply name search
+    const results = therapistProfiles
+      .filter(t => t.userId && t.userId.isActive !== false)
+      .filter(t => !search || t.userId.name.toLowerCase().includes(search.toLowerCase()));
 
-    res.json(therapists);
+    // Step 3: attach average rating
+    const enriched = await Promise.all(results.map(async (t) => {
+      const ratingAgg = await Review.aggregate([
+        { $match: { therapistId: t._id } },
+        { $group: { _id: null, avg: { $avg: '$rating' }, count: { $sum: 1 } } }
+      ]);
+      return {
+        _id: t._id,
+        userId: t.userId._id,
+        name: t.userId.name,
+        email: t.userId.email,
+        profileImage: t.userId.profileImage,
+        specialization: t.specialization,
+        experienceYears: t.experienceYears,
+        bio: t.bio,
+        workplace: t.workplace,
+        hourlyRate: t.hourlyRate,
+        languages: t.languages,
+        availability: t.availability,
+        verificationStatus: t.verification.status,
+        rating: ratingAgg[0] ? Math.round(ratingAgg[0].avg * 10) / 10 : 0,
+        reviewCount: ratingAgg[0]?.count || 0,
+      };
+    }));
+
+    res.json(enriched);
   } catch (error) {
-    res.status(500).json({ message: 'Server error' });
+    res.status(500).json({ message: 'Server error', error: error.message });
   }
 });
 
-// Get therapist by ID
+// GET /api/therapists/:id — only returns if VERIFIED
 router.get('/:id', async (req, res) => {
   try {
-    const therapist = await User.findOne({
+    const therapist = await Therapist.findOne({
       _id: req.params.id,
-      role: 'therapist',
-      isVerified: true
-    }).select('-password -verificationDocuments');
+      'verification.status': 'VERIFIED'
+    }).populate('userId', 'name email profileImage').lean();
 
     if (!therapist) {
-      return res.status(404).json({ message: 'Therapist not found' });
+      return res.status(404).json({ message: 'Therapist not found or not verified' });
     }
 
-    res.json(therapist);
+    const ratingAgg = await Review.aggregate([
+      { $match: { therapistId: therapist._id } },
+      { $group: { _id: null, avg: { $avg: '$rating' }, count: { $sum: 1 } } }
+    ]);
+
+    res.json({
+      ...therapist,
+      name: therapist.userId.name,
+      email: therapist.userId.email,
+      profileImage: therapist.userId.profileImage,
+      rating: ratingAgg[0] ? Math.round(ratingAgg[0].avg * 10) / 10 : 0,
+      reviewCount: ratingAgg[0]?.count || 0,
+    });
   } catch (error) {
-    res.status(500).json({ message: 'Server error' });
-  }
-});
-
-// Update therapist profile (therapist only)
-router.put('/profile', auth, async (req, res) => {
-  try {
-    if (req.user.role !== 'therapist') {
-      return res.status(403).json({ message: 'Access denied' });
-    }
-
-    const updates = req.body;
-    delete updates.password;
-    delete updates.role;
-    delete updates.isVerified;
-
-    const therapist = await User.findByIdAndUpdate(
-      req.user._id,
-      updates,
-      { new: true }
-    ).select('-password -verificationDocuments');
-
-    res.json(therapist);
-  } catch (error) {
-    res.status(500).json({ message: 'Server error' });
+    res.status(500).json({ message: 'Server error', error: error.message });
   }
 });
 

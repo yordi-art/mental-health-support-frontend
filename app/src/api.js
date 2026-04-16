@@ -65,8 +65,8 @@ export const therapistAPI = {
   getDashboard: () => api.get('/therapist/dashboard'),
   getProfile: () => api.get('/therapist/profile'),
   updateProfile: (data) => api.put('/therapist/profile', data),
-  getVerificationStatus: () => api.get('/therapist/verification/status'),
-  reuploadVerification: (data) => api.post('/therapist/verification/reupload', data),
+  getVerificationStatus: () => api.get('/therapist/verification-status'),
+  reuploadVerification: (data) => api.post('/therapist/reupload-license', data),
 
   getAppointments: () => api.get('/therapist/appointments'),
   updateAppointmentStatus: (id, status) => api.put(`/therapist/appointments/${id}/status`, { status }),

@@ -1,101 +1,133 @@
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ShieldCheck, CheckCircle, XCircle, AlertTriangle, Clock, Upload, FileText } from 'lucide-react';
+import { ShieldCheck, FileText, AlertTriangle, Upload, RefreshCw } from 'lucide-react';
 import DashboardLayout from '../../layouts/DashboardLayout';
+import VerificationStatusBanner, { VerificationBadge } from '../../components/therapist/VerificationStatusBanner';
 import { therapistSidebarItems } from '../../components/therapist/therapistNav';
-
-// Change this to test different states: verified | pending | flagged | failed | reupload_required
-const mockStatus = 'flagged';
-
-const configs = {
-  verified: { icon: CheckCircle, color: 'text-teal-500', bg: 'bg-teal-50', border: 'border-teal-200', title: 'License Verified', canReupload: false },
-  pending: { icon: Clock, color: 'text-yellow-500', bg: 'bg-yellow-50', border: 'border-yellow-200', title: 'Verification Pending', canReupload: false },
-  flagged: { icon: AlertTriangle, color: 'text-orange-500', bg: 'bg-orange-50', border: 'border-orange-200', title: 'Verification Flagged', canReupload: true },
-  failed: { icon: XCircle, color: 'text-red-500', bg: 'bg-red-50', border: 'border-red-200', title: 'Verification Failed', canReupload: true },
-  reupload_required: { icon: Upload, color: 'text-purple-500', bg: 'bg-purple-50', border: 'border-purple-200', title: 'Re-upload Required', canReupload: true },
-};
-
-const mockData = {
-  licenseNumber: 'ETH-PSY-2024-0041',
-  authority: 'Ethiopian Health Authority',
-  issueDate: '2022-03-15',
-  expiryDate: '2027-03-15',
-  submittedDate: '2025-04-05',
-  confidence: 42,
-  flagReason: 'Issuing authority could not be confirmed. License number format mismatch detected.',
-  systemNotes: 'Document scan quality was acceptable. Identity match: partial. Authority validation: failed.',
-};
+import { therapistAPI } from '../../api';
 
 export default function VerificationDetailsPage() {
-  const cfg = configs[mockStatus];
-  const Icon = cfg.icon;
+  const user = JSON.parse(localStorage.getItem('mhUser') || '{}');
+  const [verification, setVerification] = useState(null);
+  const [profile, setProfile] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    Promise.all([
+      therapistAPI.getVerificationStatus(),
+      therapistAPI.getProfile(),
+    ])
+      .then(([vRes, pRes]) => {
+        setVerification(vRes.data.verification);
+        setProfile(pRes.data.therapist);
+      })
+      .catch(() => {
+        // fallback mock so UI doesn't break without backend
+        setVerification({ status: 'PENDING', notes: 'Awaiting system verification.', verifiedAt: null });
+      })
+      .finally(() => setLoading(false));
+  }, []);
+
+  if (loading) {
+    return (
+      <DashboardLayout sidebarItems={therapistSidebarItems} userName={user.name || 'Dr. Sarah'}>
+        <div className="flex items-center justify-center h-64">
+          <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin" />
+        </div>
+      </DashboardLayout>
+    );
+  }
+
+  const status = verification?.status || 'PENDING';
+  const canReupload = status === 'REJECTED' || status === 'EXPIRED';
 
   return (
-    <DashboardLayout sidebarItems={therapistSidebarItems} userName="Dr. Sarah">
+    <DashboardLayout sidebarItems={therapistSidebarItems} userName={user.name || 'Dr. Sarah'}>
       <div className="max-w-2xl">
         <h1 className="text-xl font-semibold text-slate-800 mb-1">Verification Details</h1>
         <p className="text-sm text-gray-500 mb-6">System verification result for your professional license</p>
 
         {/* Status Banner */}
-        <div className={`rounded-2xl border p-5 mb-5 flex items-start gap-4 ${cfg.bg} ${cfg.border}`}>
-          <Icon size={28} className={cfg.color} />
-          <div className="flex-1">
-            <h2 className={`font-bold text-lg ${cfg.color}`}>{cfg.title}</h2>
-            <p className="text-sm text-gray-600 mt-0.5">Submitted on {mockData.submittedDate}</p>
-            {mockData.confidence !== null && (
-              <div className="flex items-center gap-2 mt-2">
-                <span className="text-xs text-gray-500">System confidence:</span>
-                <div className="w-24 h-1.5 bg-white rounded-full overflow-hidden">
-                  <div className={`h-full rounded-full ${mockData.confidence >= 80 ? 'bg-teal-500' : mockData.confidence >= 50 ? 'bg-yellow-400' : 'bg-red-400'}`}
-                    style={{ width: `${mockData.confidence}%` }} />
-                </div>
-                <span className={`text-xs font-medium ${cfg.color}`}>{mockData.confidence}%</span>
-              </div>
-            )}
-          </div>
-          {cfg.canReupload && (
-            <Link to="/therapist/reupload" className="text-xs bg-primary text-white px-3 py-1.5 rounded-lg hover:bg-blue-600 transition flex-shrink-0">
-              Re-upload
-            </Link>
-          )}
+        <VerificationStatusBanner status={status} notes={verification?.notes} />
+
+        {/* How verification works */}
+        <div className="bg-blue-50 border border-blue-100 rounded-2xl p-5 mb-5">
+          <h2 className="font-semibold text-primary mb-3 flex items-center gap-2">
+            <ShieldCheck size={16} /> How Verification Works
+          </h2>
+          <ol className="space-y-2">
+            {[
+              { step: '1', text: 'You submit your license details and upload your document.' },
+              { step: '2', text: 'The system automatically checks: license validity, expiry date, issuing authority, education field, and competency (COC/exam).' },
+              { step: '3', text: 'A result is returned instantly — VERIFIED, PENDING, REJECTED, or EXPIRED.' },
+              { step: '4', text: 'You receive an email notification with the result and next steps.' },
+              { step: '5', text: 'If rejected or expired, click "Re-upload" to fix and resubmit. The system re-verifies automatically.' },
+            ].map(({ step, text }) => (
+              <li key={step} className="flex items-start gap-3 text-sm text-blue-800">
+                <span className="w-5 h-5 bg-primary text-white rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 mt-0.5">{step}</span>
+                {text}
+              </li>
+            ))}
+          </ol>
         </div>
 
         {/* License Details */}
-        <div className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm mb-5">
-          <h2 className="font-semibold text-slate-800 mb-4 flex items-center gap-2"><FileText size={16} className="text-primary" /> License Information</h2>
-          <div className="grid grid-cols-2 gap-3 text-sm">
-            {[
-              { label: 'License Number', value: mockData.licenseNumber },
-              { label: 'Issuing Authority', value: mockData.authority },
-              { label: 'Issue Date', value: mockData.issueDate },
-              { label: 'Expiry Date', value: mockData.expiryDate },
-            ].map(row => (
-              <div key={row.label} className="bg-gray-50 rounded-xl p-3">
-                <p className="text-xs text-gray-400 mb-0.5">{row.label}</p>
-                <p className="font-medium text-slate-700">{row.value}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Flag Reason */}
-        {mockData.flagReason && (
-          <div className="bg-orange-50 border border-orange-200 rounded-2xl p-5 mb-5">
-            <h2 className="font-semibold text-orange-700 mb-2 flex items-center gap-2"><AlertTriangle size={16} /> Issue Detected</h2>
-            <p className="text-sm text-orange-700">{mockData.flagReason}</p>
+        {profile && (
+          <div className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm mb-5">
+            <h2 className="font-semibold text-slate-800 mb-4 flex items-center gap-2">
+              <FileText size={16} className="text-primary" /> License Information
+            </h2>
+            <div className="grid grid-cols-2 gap-3 text-sm">
+              {[
+                { label: 'License Number', value: profile.license?.licenseNumber || '—' },
+                { label: 'Issuing Authority', value: profile.license?.issuingAuthority || '—' },
+                { label: 'Expiry Date', value: profile.license?.licenseExpiryDate ? new Date(profile.license.licenseExpiryDate).toLocaleDateString() : '—' },
+                { label: 'Education Field', value: profile.education?.field || '—' },
+                { label: 'COC / Exam', value: profile.competency?.hasCOC || profile.competency?.examPassed ? 'Passed ✓' : 'Not submitted' },
+                { label: 'Document', value: profile.license?.licenseDocument ? 'Uploaded ✓' : 'Not uploaded' },
+              ].map(row => (
+                <div key={row.label} className="bg-gray-50 rounded-xl p-3">
+                  <p className="text-xs text-gray-400 mb-0.5">{row.label}</p>
+                  <p className="font-medium text-slate-700 text-sm">{row.value}</p>
+                </div>
+              ))}
+            </div>
           </div>
         )}
 
         {/* System Notes */}
-        <div className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm mb-5">
-          <h2 className="font-semibold text-slate-800 mb-2 flex items-center gap-2"><ShieldCheck size={16} className="text-primary" /> System Verification Notes</h2>
-          <p className="text-sm text-gray-600">{mockData.systemNotes}</p>
-        </div>
-
-        {cfg.canReupload && (
-          <Link to="/therapist/reupload" className="inline-flex items-center gap-2 bg-primary text-white px-6 py-3 rounded-xl font-semibold hover:bg-blue-600 transition">
-            <Upload size={16} /> Re-upload Credentials
-          </Link>
+        {verification?.notes && (
+          <div className={`rounded-2xl p-5 mb-5 border ${status === 'REJECTED' || status === 'EXPIRED' ? 'bg-error/5 border-error/20' : 'bg-white border-gray-100'}`}>
+            <h2 className="font-semibold text-slate-800 mb-2 flex items-center gap-2">
+              <AlertTriangle size={16} className={status === 'REJECTED' ? 'text-error' : 'text-warning'} />
+              System Verification Notes
+            </h2>
+            <p className="text-sm text-gray-600">{verification.notes}</p>
+            {verification.verifiedAt && (
+              <p className="text-xs text-gray-400 mt-2">Processed: {new Date(verification.verifiedAt).toLocaleString()}</p>
+            )}
+          </div>
         )}
+
+        {/* Actions */}
+        <div className="flex gap-3">
+          {canReupload && (
+            <Link
+              to="/therapist/reupload"
+              className="flex items-center gap-2 bg-primary text-white px-6 py-3 rounded-xl font-semibold hover:bg-blue-600 active:scale-95 transition"
+            >
+              <Upload size={16} /> Re-upload Documents
+            </Link>
+          )}
+          {status === 'PENDING' && (
+            <button
+              onClick={() => window.location.reload()}
+              className="flex items-center gap-2 border border-gray-200 text-gray-600 px-5 py-3 rounded-xl hover:bg-gray-50 transition text-sm"
+            >
+              <RefreshCw size={15} /> Refresh Status
+            </button>
+          )}
+        </div>
       </div>
     </DashboardLayout>
   );
