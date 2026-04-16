@@ -48,7 +48,7 @@ const inputCls = 'w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm f
 
 export default function TherapistRegisterPage() {
   const navigate = useNavigate();
-  const { refetchVerification } = useAuth();
+  const { setUser, setVerification } = useAuth();
   const basic = JSON.parse(sessionStorage.getItem('therapistBasic') || '{}');
 
   const [step, setStep] = useState(0);
@@ -108,10 +108,18 @@ export default function TherapistRegisterPage() {
       });
 
       const { token, user, verification } = res.data;
-      localStorage.setItem('mhUser', JSON.stringify({ ...user, token }));
-      await refetchVerification();
+      const stored = { ...user, token };
+      localStorage.setItem('mhUser', JSON.stringify(stored));
+      // Set user and verification status directly in context so ProtectedRoute works
+      setUser(stored);
+      const verStatus = verification?.status || 'PENDING';
+      setVerification(verStatus);
       sessionStorage.removeItem('therapistBasic');
-      setResult(verification?.status || 'PENDING');
+      setResult(verStatus);
+      // Auto-navigate to dashboard if VERIFIED
+      if (verStatus === 'VERIFIED') {
+        setTimeout(() => navigate('/therapist/dashboard'), 2000);
+      }
     } catch (err) {
       setError(err.response?.data?.message || err.response?.data?.error || 'Registration failed. Please check all fields.');
     } finally {

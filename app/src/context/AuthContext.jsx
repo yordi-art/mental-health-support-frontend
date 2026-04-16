@@ -52,7 +52,12 @@ export function AuthProvider({ children }) {
     const stored = { ...u, token };
     localStorage.setItem('mhUser', JSON.stringify(stored));
     setUser(stored);
+    if (u.role === 'therapist') await fetchVerification();
     return u;
+  };
+
+  const setVerification = (status) => {
+    setVerificationStatus(status);
   };
 
   const logout = () => {
@@ -62,7 +67,7 @@ export function AuthProvider({ children }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, verificationStatus, loading, login, logout, register, refetchVerification: fetchVerification }}>
+    <AuthContext.Provider value={{ user, setUser, verificationStatus, loading, login, logout, register, setVerification, refetchVerification: fetchVerification }}>
       {children}
     </AuthContext.Provider>
   );

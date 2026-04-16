@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import DashboardLayout from '../../layouts/DashboardLayout';
 import { clientSidebarItems } from '../../components/client/clientNav';
 import { clientAPI } from '../../api';
+import { useAuth } from '../../context/AuthContext';
 
 const phq9 = [
   'Little interest or pleasure in doing things',
@@ -29,6 +30,7 @@ const gad7 = [
 const options = ['Not at all', 'Several days', 'More than half the days', 'Nearly every day'];
 
 export default function AssessmentPage() {
+  const { user } = useAuth();
   const [type, setType] = useState('PHQ-9');
   const [answers, setAnswers] = useState({});
   const [submitted, setSubmitted] = useState(false);
@@ -59,7 +61,7 @@ export default function AssessmentPage() {
 
   if (submitted) {
     return (
-      <DashboardLayout sidebarItems={clientSidebarItems} userName="Yordanos T.">
+      <DashboardLayout sidebarItems={clientSidebarItems} userName={user?.name || ''}>
         <div className="max-w-lg mx-auto text-center py-16">
           <div className="w-20 h-20 bg-blue-50 rounded-full flex items-center justify-center mx-auto mb-4">
             <span className="text-3xl font-bold text-primary">{score}</span>
@@ -78,7 +80,7 @@ export default function AssessmentPage() {
   }
 
   return (
-    <DashboardLayout sidebarItems={clientSidebarItems} userName="Yordanos T.">
+    <DashboardLayout sidebarItems={clientSidebarItems} userName={user?.name || ''}>
       <div className="max-w-2xl mx-auto">
         <div className="flex gap-3 mb-6">
           {['PHQ-9', 'GAD-7'].map(t => (

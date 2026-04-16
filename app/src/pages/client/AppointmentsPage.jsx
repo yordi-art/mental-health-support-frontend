@@ -8,6 +8,14 @@ import { clientSidebarItems } from '../../components/client/clientNav';
 import { clientAPI } from '../../api';
 import { useAuth } from '../../context/AuthContext';
 
+function getTherapistName(a) {
+  return a.therapistId?.userId?.name || a.therapistId?.name || 'Therapist';
+}
+
+function getTherapistId(a) {
+  return a.therapistId?._id || a.therapistId;
+}
+
 export default function AppointmentsPage() {
   const { user } = useAuth();
   const [appointments, setAppointments] = useState([]);
@@ -15,13 +23,13 @@ export default function AppointmentsPage() {
 
   useEffect(() => {
     clientAPI.getAppointments()
-      .then(res => setAppointments(res.data?.appointments || res.data || []))
+      .then(res => setAppointments(Array.isArray(res.data) ? res.data : res.data?.appointments || []))
       .catch(() => {})
       .finally(() => setLoading(false));
   }, []);
 
-  const upcoming = appointments.filter(a => a.status === 'upcoming');
-  const past = appointments.filter(a => a.status !== 'upcoming');
+  const upcoming = appointments.filter(a => ['pending', 'confirmed'].includes(a.status));
+  const past = appointments.filter(a => !['pending', 'confirmed'].includes(a.status));
 
   if (loading) {
     return (
@@ -52,20 +60,19 @@ export default function AppointmentsPage() {
           {upcoming.map(a => (
             <div key={a._id} className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 flex items-center gap-4">
               <div className="w-12 h-12 rounded-full bg-primary text-white flex items-center justify-center font-bold">
-                {a.therapistName?.[0] || 'T'}
+                {getTherapistName(a)[0]?.toUpperCase()}
               </div>
               <div className="flex-1">
-                <p className="font-semibold text-slate-800">{a.therapistName}</p>
+                <p className="font-semibold text-slate-800">{getTherapistName(a)}</p>
                 <div className="flex items-center gap-3 text-xs text-gray-500 mt-0.5">
                   <span className="flex items-center gap-1"><Calendar size={11} />{a.date}</span>
                   <span className="flex items-center gap-1"><Clock size={11} />{a.time}</span>
-                  <span className="flex items-center gap-1"><Video size={11} />{a.type}</span>
+                  <span className="flex items-center gap-1"><Video size={11} />{a.sessionType}</span>
                 </div>
               </div>
               <StatusBadge status={a.status} />
               <div className="flex gap-2">
                 <Link to="/client/session" className="text-xs bg-primary text-white px-3 py-1.5 rounded-lg hover:bg-blue-600 transition">Join</Link>
-                <button className="text-xs border border-gray-200 text-gray-500 px-3 py-1.5 rounded-lg hover:bg-gray-50 transition">Reschedule</button>
                 <button
                   onClick={() => clientAPI.cancelAppointment(a._id).then(() => setAppointments(prev => prev.filter(x => x._id !== a._id)))}
                   className="text-xs border border-red-100 text-red-500 px-3 py-1.5 rounded-lg hover:bg-red-50 transition"
@@ -84,19 +91,21 @@ export default function AppointmentsPage() {
           {past.map(a => (
             <div key={a._id} className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 flex items-center gap-4">
               <div className="w-12 h-12 rounded-full bg-gray-100 text-gray-500 flex items-center justify-center font-bold">
-                {a.therapistName?.[0] || 'T'}
+                {getTherapistName(a)[0]?.toUpperCase()}
               </div>
               <div className="flex-1">
-                <p className="font-semibold text-slate-800">{a.therapistName}</p>
+                <p className="font-semibold text-slate-800">{getTherapistName(a)}</p>
                 <div className="flex items-center gap-3 text-xs text-gray-500 mt-0.5">
                   <span className="flex items-center gap-1"><Calendar size={11} />{a.date}</span>
                   <span className="flex items-center gap-1"><Clock size={11} />{a.time}</span>
                 </div>
               </div>
               <StatusBadge status={a.status} />
-              <div className="flex gap-2">
-                <span className="text-xs text-gray-500 font-medium">ETB {a.fee}</span>
-                <Link to={`/client/reviews/new/${a.therapistId}`} className="text-xs border border-gray-200 text-gray-500 px-3 py-1.5 rounded-lg hover:bg-gray-50 transition">Review</Link>
+              <div className="flex gap-2 items-center">
+                <span className="text-xs text-gray-500 font-medium">ETB {a.fee || 0}</span>
+                {a.status === 'completed' && (
+                  <Link to={`/client/reviews/new/${getTherapistId(a)}`} className="text-xs border border-gray-200 text-gray-500 px-3 py-1.5 rounded-lg hover:bg-gray-50 transition">Review</Link>
+                )}
               </div>
             </div>
           ))}
