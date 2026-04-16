@@ -2,20 +2,21 @@ import { useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Heart, Menu, X, LogOut, ChevronRight } from 'lucide-react';
 import NotificationBell from '../components/common/NotificationBell';
+import { useAuth } from '../context/AuthContext';
 
-export default function DashboardLayout({ children, sidebarItems, role = 'client', userName = 'User' }) {
+export default function DashboardLayout({ children, sidebarItems, userName = 'User' }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const { pathname } = useLocation();
   const navigate = useNavigate();
+  const { logout } = useAuth();
 
   const handleLogout = () => {
-    localStorage.removeItem('mhUser');
+    logout();
     navigate('/login');
   };
 
   return (
     <div className="min-h-screen flex bg-bg">
-      {/* Sidebar */}
       <aside className={`fixed inset-y-0 left-0 z-50 w-60 bg-white shadow-lg flex flex-col transition-transform duration-200
         ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'} md:translate-x-0 md:static md:shadow-sm`}>
         <div className="h-16 flex items-center px-5 border-b border-gray-100">
@@ -45,12 +46,9 @@ export default function DashboardLayout({ children, sidebarItems, role = 'client
         </div>
       </aside>
 
-      {/* Overlay */}
       {sidebarOpen && <div className="fixed inset-0 bg-black/30 z-40 md:hidden" onClick={() => setSidebarOpen(false)} />}
 
-      {/* Main */}
       <div className="flex-1 flex flex-col min-w-0">
-        {/* Topbar */}
         <header className="h-16 bg-white shadow-sm flex items-center px-4 gap-4 sticky top-0 z-30">
           <button className="md:hidden" onClick={() => setSidebarOpen(true)}><Menu size={22} /></button>
           <div className="ml-auto flex items-center gap-3">
@@ -69,7 +67,6 @@ export default function DashboardLayout({ children, sidebarItems, role = 'client
             </div>
           </div>
         </header>
-
         <main className="flex-1 p-4 md:p-6 overflow-y-auto">{children}</main>
       </div>
     </div>
