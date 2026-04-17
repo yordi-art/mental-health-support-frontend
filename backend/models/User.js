@@ -1,70 +1,51 @@
 const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
 
+/**
+ * users collection
+ * Used by: LoginPage, RegisterPage, ProfilePage, AuthContext,
+ *          AdminUsersPage, TherapistCard (userId.name/email/profileImage)
+ */
 const userSchema = new mongoose.Schema({
-  name: {
-    type: String,
-    required: true,
-    trim: true
+  name:           { type: String, required: true, trim: true },
+  email:          { type: String, required: true, unique: true, lowercase: true, trim: true },
+  password:       { type: String, required: true, minlength: 6 },
+  role:           { type: String, enum: ['client', 'therapist', 'admin'], default: 'client' },
+
+  // ProfilePage fields
+  phone:          { type: String, trim: true, default: null },
+  gender:         { type: String, enum: ['male', 'female', 'other'], default: null },
+  dateOfBirth:    { type: Date, default: null },
+  profileImage:   { type: String, default: null },          // URL
+  emergencyContact: { type: String, trim: true, default: null },
+
+  // ProfilePage notification toggles
+  notificationPreferences: {
+    appointments: { type: Boolean, default: true },
+    assessments:  { type: Boolean, default: true },
+    payments:     { type: Boolean, default: true },
+    tips:         { type: Boolean, default: false }
   },
-  email: {
-    type: String,
-    required: true,
-    unique: true,
-    lowercase: true,
-    trim: true
-  },
-  password: {
-    type: String,
-    required: true,
-    minlength: 6
-  },
-  role: {
-    type: String,
-    enum: ['client', 'therapist', 'admin'],
-    default: 'client'
-  },
-  phone: {
-    type: String,
-    trim: true
-  },
-  gender: {
-    type: String,
-    enum: ['male', 'female', 'other']
-  },
-  dateOfBirth: {
-    type: Date
-  },
-  profileImage: {
-    type: String // URL to image
-  },
-  isActive: {
-    type: Boolean,
-    default: true
-  },
-  createdAt: {
-    type: Date,
-    default: Date.now
-  }
+
+  isActive:       { type: Boolean, default: true },
+  createdAt:      { type: Date, default: Date.now },
+  updatedAt:      { type: Date, default: Date.now }
 });
 
-// Hash password before saving
-userSchema.pre('save', async function() {
+userSchema.pre('save', async function () {
+  this.updatedAt = Date.now();
   if (!this.isModified('password')) return;
-  const salt = await bcrypt.genSalt(10);
-  this.password = await bcrypt.hash(this.password, salt);
+  this.password = await bcrypt.hash(this.password, await bcrypt.genSalt(10));
 });
 
-// Compare password method
-userSchema.methods.comparePassword = async function(candidatePassword) {
-  return await bcrypt.compare(candidatePassword, this.password);
+userSchema.methods.comparePassword = function (candidate) {
+  return bcrypt.compare(candidate, this.password);
 };
 
-// Remove password from JSON output
-userSchema.methods.toJSON = function() {
-  const userObject = this.toObject();
-  delete userObject.password;
-  return userObject;
+userSchema.methods.toJSON = function () {
+  const o = this.toObject();
+  delete o.password;
+  return o;
 };
 
 module.exports = mongoose.model('User', userSchema);

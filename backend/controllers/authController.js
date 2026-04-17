@@ -1,5 +1,6 @@
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
+const Therapist = require('../models/Therapist');
 const { sendEmail } = require('../services/emailService');
 
 class AuthController {
@@ -7,65 +8,38 @@ class AuthController {
     try {
       const { name, email, password, role, phone, gender, dateOfBirth } = req.body;
 
-      // Validate required fields
-      if (!name || !email || !password) {
+      if (!name || !email || !password)
         return res.status(400).json({ message: 'Name, email, and password are required' });
-      }
 
-      // Validate password length
-      if (password.length < 6) {
+      if (password.length < 6)
         return res.status(400).json({ message: 'Password must be at least 6 characters long' });
-      }
 
-      // Only allow client registration through this endpoint
-      if (role === 'therapist') {
-        return res.status(400).json({
-          message: 'Therapists must register via POST /api/therapist/register'
-        });
-      }
+      if (role === 'therapist')
+        return res.status(400).json({ message: 'Therapists must register via POST /api/therapist/register' });
 
-      // Check if user already exists
       const existingUser = await User.findOne({ email });
-      if (existingUser) {
+      if (existingUser)
         return res.status(400).json({ message: 'User already exists with this email' });
-      }
 
-      // Create user
       const user = new User({
-        name,
-        email,
-        password,
+        name, email, password,
         role: role || 'client',
-        ...(phone && { phone }),
-        ...(gender && { gender }),
+        ...(phone       && { phone }),
+        ...(gender      && { gender }),
         ...(dateOfBirth && { dateOfBirth: new Date(dateOfBirth) }),
       });
 
       await user.save();
 
-      // Send welcome email (don't fail registration if email fails)
-      try {
-        await sendEmail(user.email, 'welcome', { name: user.name });
-      } catch (emailError) {
-        console.error('Welcome email failed:', emailError.message);
-      }
+      try { await sendEmail(user.email, 'welcome', { name: user.name }); }
+      catch (e) { console.error('Welcome email failed:', e.message); }
 
-      // Generate token
-      const token = jwt.sign(
-        { userId: user._id },
-        process.env.JWT_SECRET,
-        { expiresIn: '7d' }
-      );
+      const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET, { expiresIn: '7d' });
 
       res.status(201).json({
         message: 'User registered successfully',
         token,
-        user: {
-          id: user._id,
-          name: user.name,
-          email: user.email,
-          role: user.role
-        }
+        user: { id: user._id, name: user.name, email: user.email, role: user.role }
       });
     } catch (error) {
       console.error('Registration error:', error);
@@ -73,96 +47,60 @@ class AuthController {
     }
   }
 
-  // Login user
   static async login(req, res) {
     try {
       const { email, password } = req.body;
 
-      // Find user
       const user = await User.findOne({ email });
-      if (!user) {
-        return res.status(400).json({ message: 'Invalid email or password' });
-      }
+      if (!user) return res.status(400).json({ message: 'Invalid email or password' });
 
-      // Check password
       const isMatch = await user.comparePassword(password);
-      if (!isMatch) {
-        return res.status(400).json({ message: 'Invalid email or password' });
-      }
+      if (!isMatch) return res.status(400).json({ message: 'Invalid email or password' });
 
-      // Check if account is active
-      if (!user.isActive) {
-        return res.status(400).json({ message: 'Account is deactivated' });
-      }
+      if (!user.isActive) return res.status(400).json({ message: 'Account is deactivated' });
 
-      // Generate token
-      const token = jwt.sign(
-        { userId: user._id },
-        process.env.JWT_SECRET,
-        { expiresIn: '7d' }
-      );
+      const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET, { expiresIn: '7d' });
 
       res.json({
         message: 'Login successful',
         token,
-        user: {
-          id: user._id,
-          name: user.name,
-          email: user.email,
-          role: user.role
-        }
+        user: { id: user._id, name: user.name, email: user.email, role: user.role }
       });
     } catch (error) {
       res.status(500).json({ message: 'Login failed', error: error.message });
     }
   }
 
-  // Get current user profile
+  // GET /auth/profile
+  // ProfilePage reads: user.name, user.email, user.phone, user.gender,
+  //                    user.dateOfBirth, user.emergencyContact
   static async getProfile(req, res) {
     try {
       const user = await User.findById(req.user._id);
+      if (!user) return res.status(404).json({ message: 'User not found' });
 
       let additionalData = {};
       if (user.role === 'therapist') {
         const therapist = await Therapist.findOne({ userId: user._id });
-        if (therapist) {
-          additionalData.therapist = therapist;
-        }
+        if (therapist) additionalData.therapist = therapist;
       }
 
-      res.json({
-        user,
-        ...additionalData
-      });
+      res.json({ user, ...additionalData });
     } catch (error) {
       res.status(500).json({ message: 'Failed to get profile', error: error.message });
     }
   }
 
-  // Update user profile
+  // PUT /auth/profile
+  // ProfilePage saves: name, phone, emergencyContact, notificationPreferences
   static async updateProfile(req, res) {
     try {
-      const updates = req.body;
-      const allowedUpdates = ['name', 'phone', 'profileImage'];
+      const allowed = ['name', 'phone', 'profileImage', 'emergencyContact', 'notificationPreferences'];
+      const updates = {};
+      Object.keys(req.body).forEach(k => { if (allowed.includes(k)) updates[k] = req.body[k]; });
 
-      // Filter allowed updates
-      const filteredUpdates = {};
-      Object.keys(updates).forEach(key => {
-        if (allowedUpdates.includes(key)) {
-          filteredUpdates[key] = updates[key];
-        }
-      });
-
-      const user = await User.findByIdAndUpdate(
-        req.user._id,
-        filteredUpdates,
-        { new: true }
-      );
-
-      res.json({
-        message: 'Profile updated successfully',
-        user
-      });
+      const user = await User.findByIdAndUpdate(req.user._id, updates, { new: true });
+      res.json({ message: 'Profile updated successfully', user });
     } catch (error) {
       res.status(500).json({ message: 'Failed to update profile', error: error.message });
     }

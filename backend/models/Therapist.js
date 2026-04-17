@@ -1,140 +1,73 @@
 const mongoose = require('mongoose');
 
 /**
- * Therapist Model
- * 
- * This system performs preliminary digital verification and does not replace 
- * official licensing by the Ministry of Health or regulatory authorities in Ethiopia.
+ * therapists collection
+ * Used by: TherapistRegisterPage (all 4 steps), TherapistProfilePage,
+ *          FindTherapistPage (name, profileImage, specialization, bio,
+ *          experienceYears, hourlyRate, availability, rating, reviewCount, workplace),
+ *          TherapistCard (avatar→profileImage, verified, rating, reviews, experience),
+ *          AvailabilityPage, AdminVerificationsPage (licenseNumber, authority, expiry,
+ *          confidence, status, submitted), AI matching service
  */
-
 const therapistSchema = new mongoose.Schema({
-  userId: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'User',
-    required: true,
-    unique: true
-  },
+  userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, unique: true },
 
-  // Professional Information
-  specialization: [{
-    type: String,
-    required: true
-  }],
-  experienceYears: {
-    type: Number,
-    required: true,
-    min: 0
-  },
-  bio: {
-    type: String,
-    required: true,
-    maxlength: 1000
-  },
-  workplace: {
-    type: String,
-    required: true
-  },
+  // Step 1 — Professional Info
+  specialization:  [{ type: String }],
+  experienceYears: { type: Number, default: 0, min: 0 },
+  bio:             { type: String, default: '', maxlength: 1000 },
+  workplace:       { type: String, default: '' },
+  hourlyRate:      { type: Number, default: 500, min: 0 },
+  languages:       [{ type: String }],
 
-  // Education Details
+  // Step 2 — Education
   education: {
-    degreeType: {
-      type: String,
-      enum: ['Bachelor', 'Master', 'Doctorate', 'Diploma'],
-      required: true
-    },
-    field: {
-      type: String,
-      enum: ['Psychology', 'Clinical Psychology', 'Social Work', 'Counseling', 'Other'],
-      required: true
-    },
-    institution: {
-      type: String,
-      required: true
-    },
-    graduationYear: {
-      type: Number,
-      required: true
-    }
+    degreeType:      { type: String, enum: ['Bachelor', 'Master', 'Doctorate', 'Diploma'] },
+    field:           { type: String, enum: ['Psychology', 'Clinical Psychology', 'Social Work', 'Counseling', 'Other'] },
+    institution:     { type: String, default: '' },
+    graduationYear:  { type: Number }
   },
 
-  // License Information
-  license: {
-    licenseNumber: {
-      type: String,
-      required: true,
-      unique: true
-    },
-    issuingAuthority: {
-      type: String,
-      enum: ['Ministry of Health', 'Regional Bureau of Health', 'Other'],
-      required: true
-    },
-    licenseExpiryDate: {
-      type: Date,
-      required: true
-    },
-    licenseDocument: {
-      type: String // URL to uploaded document
-    }
-  },
-
-  // Competency Information
+  // Step 2 — Competency checkboxes
   competency: {
-    hasCOC: {
-      type: Boolean,
-      default: false
-    },
-    examPassed: {
-      type: Boolean,
-      default: false
-    }
+    hasCOC:      { type: Boolean, default: false },
+    examPassed:  { type: Boolean, default: false }
   },
 
-  // Verification Status
+  // Step 3 — License
+  license: {
+    licenseNumber:    { type: String, required: true, unique: true },
+    issuingAuthority: { type: String, enum: ['Ministry of Health', 'Regional Bureau of Health', 'Other'] },
+    issueDate:        { type: Date, default: null },
+    licenseExpiryDate:{ type: Date },
+    licenseDocument:  { type: String, default: null }   // filename or URL
+  },
+
+  // Verification — AdminVerificationsPage columns: status, confidence, submitted, notes
   verification: {
-    status: {
-      type: String,
-      enum: ['VERIFIED', 'PENDING', 'REJECTED', 'EXPIRED'],
-      default: 'PENDING'
-    },
-    notes: {
-      type: String
-    },
-    verifiedAt: {
-      type: Date
-    }
+    status:     { type: String, enum: ['VERIFIED', 'PENDING', 'REJECTED', 'EXPIRED'], default: 'PENDING' },
+    notes:      { type: String, default: null },
+    confidence: { type: Number, default: null },   // 0-100, shown in admin table
+    verifiedAt: { type: Date, default: null },
+    rejectedAt: { type: Date, default: null }
   },
 
-  // Additional Fields
-  hourlyRate: {
-    type: Number,
-    default: 50
-  },
+  // AvailabilityPage + AI matching
   availability: [{
-    day: {
-      type: String,
-      enum: ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday']
-    },
-    startTime: String,
-    endTime: String
-  }],
-  languages: [{
-    type: String
+    day:       { type: String, enum: ['monday','tuesday','wednesday','thursday','friday','saturday','sunday'] },
+    startTime: { type: String },
+    endTime:   { type: String }
   }],
 
-  createdAt: {
-    type: Date,
-    default: Date.now
-  },
-  updatedAt: {
-    type: Date,
-    default: Date.now
-  }
+  // Cached stats — updated when reviews/appointments change
+  // FindTherapistPage uses: rating, reviewCount
+  rating:      { type: Number, default: 0 },
+  reviewCount: { type: Number, default: 0 },
+
+  createdAt: { type: Date, default: Date.now },
+  updatedAt: { type: Date, default: Date.now }
 });
 
-// Update updatedAt before saving
-therapistSchema.pre('save', async function() {
-  this.updatedAt = Date.now();
-});
+therapistSchema.pre('save', function () { this.updatedAt = Date.now(); });
 
 module.exports = mongoose.model('Therapist', therapistSchema);
