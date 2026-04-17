@@ -33,15 +33,13 @@ export default function TherapistDashboard() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!vLoading && isVerified) {
+    if (!vLoading) {
       therapistAPI.getDashboard()
         .then(res => setDashboard(res.data))
         .catch(() => {})
         .finally(() => setLoading(false));
-    } else if (!vLoading) {
-      setLoading(false);
     }
-  }, [vLoading, isVerified]);
+  }, [vLoading]);
 
   if (vLoading || loading) {
     return (

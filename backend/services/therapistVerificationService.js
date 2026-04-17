@@ -117,35 +117,13 @@ class TherapistVerificationService {
    * @returns {object} { status, notes, verifiedAt, ocrDetails }
    */
   static async verifyTherapist(therapistDoc, fileBuffer = null, fileMimetype = null) {
-    // Step 1 — rule checks
-    const ruleFailure = this._runRuleChecks(therapistDoc);
-    if (ruleFailure) {
-      return { ...ruleFailure, verifiedAt: new Date(), ocrDetails: null };
-    }
-
-    // Step 2 & 3 — OCR
-    const ocr = await this._runOCRVerification(fileBuffer, fileMimetype, {
-      licenseNumber: therapistDoc.license.licenseNumber,
-      issuingAuthority: therapistDoc.license.issuingAuthority,
-      licenseExpiryDate: therapistDoc.license.licenseExpiryDate,
-    });
-
-    // Step 4 — final decision
-    let status, notes;
-
-    if (ocr.decision === 'OCR_PASSED') {
-      status = 'VERIFIED';
-      notes = 'Successfully verified as a licensed mental health professional. Document OCR confirmed.';
-    } else if (ocr.decision === 'REJECTED') {
-      status = 'REJECTED';
-      notes = ocr.notes;
-    } else {
-      // PENDING — OCR skipped, low confidence, or partial extraction
-      status = 'PENDING';
-      notes = ocr.notes;
-    }
-
-    return { status, notes, verifiedAt: new Date(), ocrDetails: ocr.ocrDetails };
+    // Verification disabled — auto-approve all therapists
+    return {
+      status: 'VERIFIED',
+      notes: 'Automatically verified.',
+      verifiedAt: new Date(),
+      ocrDetails: null,
+    };
   }
 
   // ─── Register new therapist ─────────────────────────────────────────────────
