@@ -101,10 +101,12 @@ router.get('/payments', PaymentController.getPayments);
 router.post('/payments', PaymentController.createPayment);
 router.get('/payments/:id', PaymentController.getPaymentById);
 
-// Assessments
-router.post('/assessment', AssessmentController.submitAssessment);
-router.get('/assessment/results', AssessmentController.getAssessmentResults);
+// Assessments — AI-powered scoring & therapist matching
 router.get('/assessment/questions/:type', AssessmentController.getQuestions);
+router.post('/assessment', AssessmentController.submitAssessment);          // returns score + matched therapists
+router.get('/assessment/results', AssessmentController.getAssessmentResults);
+router.get('/assessment/latest', AssessmentController.getLatestAssessment);
+router.get('/assessment/recommendations', AssessmentController.getRecommendations); // re-run matching on latest
 
 // Reviews
 router.get('/reviews', ReviewController.getUserReviews);
