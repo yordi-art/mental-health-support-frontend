@@ -1,14 +1,12 @@
 import { useState, useEffect } from 'react';
-import { Star, Clock, DollarSign, BookOpen, Search } from 'lucide-react';
+import { Star, Clock, DollarSign, BookOpen, Search, Brain } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import DashboardLayout from '../../layouts/DashboardLayout';
 import PageHeader from '../../components/common/PageHeader';
 import { clientSidebarItems } from '../../components/client/clientNav';
-import { publicAPI } from '../../api';
+import { clientAPI, publicAPI } from '../../api';
 
-const SPECIALIZATIONS = ['All', 'Anxiety & Depression', 'Trauma & PTSD', 'Stress & Burnout', 'Relationship Issues', 'Grief & Loss'];
-
-function TherapistCard({ t }) {
+function TherapistCard({ t, aiMatchScore }) {
   const initials = t.name?.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase();
   return (
     <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 flex flex-col gap-4 hover:shadow-md transition">
@@ -29,7 +27,14 @@ function TherapistCard({ t }) {
             <span className="text-xs text-gray-400">({t.reviewCount || 0} reviews)</span>
           </div>
         </div>
-        <span className="text-xs bg-success/10 text-success font-semibold px-2 py-0.5 rounded-full flex-shrink-0">VERIFIED</span>
+        <div className="flex flex-col items-end gap-1">
+          <span className="text-xs bg-success/10 text-success font-semibold px-2 py-0.5 rounded-full">VERIFIED</span>
+          {aiMatchScore != null && (
+            <span className="text-xs bg-primary/10 text-primary font-semibold px-2 py-0.5 rounded-full flex items-center gap-1">
+              <Brain size={10} /> {Math.round(aiMatchScore * 100)}% match
+            </span>
+          )}
+        </div>
       </div>
 
       <div className="flex flex-wrap gap-1.5">
@@ -49,16 +54,12 @@ function TherapistCard({ t }) {
       </div>
 
       <div className="flex gap-2 mt-auto">
-        <Link
-          to={`/client/therapists/${t._id}`}
-          className="flex-1 text-center text-xs border border-gray-200 text-gray-600 rounded-xl py-2 hover:bg-gray-50 transition"
-        >
+        <Link to={`/client/therapists/${t._id}`}
+          className="flex-1 text-center text-xs border border-gray-200 text-gray-600 rounded-xl py-2 hover:bg-gray-50 transition">
           View Profile
         </Link>
-        <Link
-          to={`/client/book/${t._id}`}
-          className="flex-1 text-center text-xs bg-primary text-white rounded-xl py-2 hover:bg-blue-600 active:scale-95 transition font-medium"
-        >
+        <Link to={`/client/book/${t._id}`}
+          className="flex-1 text-center text-xs bg-primary text-white rounded-xl py-2 hover:bg-blue-600 transition font-medium">
           Book Session
         </Link>
       </div>
@@ -68,10 +69,14 @@ function TherapistCard({ t }) {
 
 export default function FindTherapistPage() {
   const user = JSON.parse(localStorage.getItem('mhUser') || '{}');
-  const [therapists, setTherapists] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [search, setSearch] = useState('');
-  const [filter, setFilter] = useState('All');
+  const [therapists, setTherapists]     = useState([]);
+  const [aiScores, setAiScores]         = useState({});   // id → aiMatchScore
+  const [aiSeverity, setAiSeverity]     = useState(null); // from latest assessment
+  const [loading, setLoading]           = useState(true);
+  const [search, setSearch]             = useState('');
+  const [filter, setFilter]             = useState('All');
+
+  const SPECIALIZATIONS = ['All', 'Anxiety & Depression', 'Trauma & PTSD', 'Stress & Burnout', 'Relationship Issues', 'Grief & Loss'];
 
   useEffect(() => {
     const params = {};
@@ -79,15 +84,66 @@ export default function FindTherapistPage() {
     if (search) params.search = search;
 
     setLoading(true);
-    publicAPI.getTherapists(params)
-      .then(res => setTherapists(res.data || []))
-      .catch(() => setTherapists([]))
-      .finally(() => setLoading(false));
+
+    // Fetch therapists + AI recommendations in parallel
+    Promise.all([
+      publicAPI.getTherapists(params),
+      clientAPI.getAssessmentResults().catch(() => ({ data: [] })),
+    ]).then(([thRes, assessRes]) => {
+      const allTherapists = thRes.data || [];
+      setTherapists(allTherapists);
+
+      // Get latest assessment severity for AI matching
+      const assessments = assessRes.data?.assessments || assessRes.data || [];
+      const latest = assessments[0];
+
+      if (latest?.resultCategory) {
+        setAiSeverity(latest.resultCategory);
+        // Call AI match endpoint with latest severity
+        clientAPI.getRecommendations()
+          .then(recRes => {
+            const recommended = recRes.data?.recommendedTherapists || [];
+            // Build a map of therapist id → aiMatchScore
+            const scoreMap = {};
+            recommended.forEach(r => { if (r.id) scoreMap[r.id] = r.aiMatchScore; });
+            setAiScores(scoreMap);
+
+            // Re-sort therapists: AI matched ones first
+            setTherapists(prev => {
+              const withScore = prev.map(t => ({ ...t, _aiScore: scoreMap[String(t._id)] ?? null }));
+              return withScore.sort((a, b) => {
+                if (a._aiScore != null && b._aiScore != null) return b._aiScore - a._aiScore;
+                if (a._aiScore != null) return -1;
+                if (b._aiScore != null) return 1;
+                return 0;
+              });
+            });
+          })
+          .catch(() => {}); // AI service down — just show plain list
+      }
+    })
+    .catch(() => setTherapists([]))
+    .finally(() => setLoading(false));
   }, [filter, search]);
 
   return (
     <DashboardLayout sidebarItems={clientSidebarItems} userName={user.name || 'User'}>
-      <PageHeader title="Find a Therapist" description="Browse system-verified mental health professionals" />
+      <PageHeader
+        title="Find a Therapist"
+        description={aiSeverity
+          ? `AI-ranked based on your ${aiSeverity} assessment result`
+          : 'Browse system-verified mental health professionals'}
+      />
+
+      {/* AI banner */}
+      {aiSeverity && (
+        <div className="mb-5 flex items-center gap-2 bg-primary/5 border border-primary/20 rounded-xl px-4 py-3">
+          <Brain size={16} className="text-primary flex-shrink-0" />
+          <p className="text-sm text-primary">
+            Therapists are ranked by AI based on your <span className="font-semibold capitalize">{aiSeverity}</span> assessment result.
+          </p>
+        </div>
+      )}
 
       {/* Search + Filter */}
       <div className="flex flex-col sm:flex-row gap-3 mb-6">
@@ -102,11 +158,8 @@ export default function FindTherapistPage() {
         </div>
         <div className="flex gap-2 flex-wrap">
           {SPECIALIZATIONS.map(s => (
-            <button
-              key={s}
-              onClick={() => setFilter(s)}
-              className={`px-3 py-2 rounded-xl text-xs font-medium transition ${filter === s ? 'bg-primary text-white' : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50'}`}
-            >
+            <button key={s} onClick={() => setFilter(s)}
+              className={`px-3 py-2 rounded-xl text-xs font-medium transition ${filter === s ? 'bg-primary text-white' : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50'}`}>
               {s}
             </button>
           ))}
@@ -128,7 +181,13 @@ export default function FindTherapistPage() {
         <>
           <p className="text-xs text-gray-400 mb-4">{therapists.length} verified therapist{therapists.length !== 1 ? 's' : ''} found</p>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-            {therapists.map(t => <TherapistCard key={t._id} t={t} />)}
+            {therapists.map(t => (
+              <TherapistCard
+                key={t._id}
+                t={t}
+                aiMatchScore={aiScores[String(t._id)] ?? t._aiScore ?? null}
+              />
+            ))}
           </div>
         </>
       )}

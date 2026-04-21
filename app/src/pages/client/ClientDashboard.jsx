@@ -6,7 +6,7 @@ import DashboardCard from '../../components/common/DashboardCard';
 import TherapistCard from '../../components/common/TherapistCard';
 import StatusBadge from '../../components/common/StatusBadge';
 import { clientSidebarItems } from '../../components/client/clientNav';
-import { clientAPI, notificationAPI, publicAPI } from '../../api';
+import { clientAPI, notificationAPI, publicAPI } from '../../api';  // publicAPI kept for fallback
 import { useAuth } from '../../context/AuthContext';
 
 const moods = [
@@ -30,11 +30,9 @@ export default function ClientDashboard() {
   useEffect(() => {
     Promise.all([
       clientAPI.getDashboard(),
-      publicAPI.getTherapists({ limit: 2 }),
       notificationAPI.getAll(),
-    ]).then(([dash, th, notif]) => {
+    ]).then(([dash, notif]) => {
       const data = dash.data;
-      // Normalize backend shape to what the UI expects
       const upcoming = data.upcomingAppointments?.[0] || data.upcomingAppointment || null;
       const latestRaw = data.recentAssessments?.[0] || data.latestAssessment || null;
       setDashboard({
@@ -45,14 +43,26 @@ export default function ClientDashboard() {
         latestAssessment: latestRaw ? {
           type: latestRaw.type || latestRaw.assessmentType || '—',
           score: latestRaw.score ?? latestRaw.totalScore ?? '—',
-          category: latestRaw.category || latestRaw.severity || '—',
+          category: latestRaw.category || latestRaw.resultCategory || latestRaw.severity || '—',
           recommendation: latestRaw.recommendation || '',
           date: latestRaw.date || (latestRaw.createdAt ? new Date(latestRaw.createdAt).toLocaleDateString() : ''),
         } : null,
         billing: data.billing || null,
       });
-      setTherapists(th.data?.therapists || th.data || []);
       setNotifications(notif.data?.notifications || notif.data || []);
+
+      // ── AI therapist recommendations based on latest assessment ──
+      clientAPI.getRecommendations()
+        .then(recRes => {
+          const recommended = recRes.data?.recommendedTherapists || [];
+          setTherapists(recommended.slice(0, 2));
+        })
+        .catch(() => {
+          // AI service down — fall back to plain verified list
+          publicAPI.getTherapists({ limit: 2 })
+            .then(th => setTherapists(th.data?.therapists || th.data || []))
+            .catch(() => {});
+        });
     }).catch(() => {}).finally(() => setLoading(false));
   }, []);
 

@@ -51,6 +51,7 @@ export const clientAPI = {
   submitAssessment: (data) => api.post('/client/assessment', data),
   getAssessmentResults: () => api.get('/client/assessment/results'),
   getAssessmentQuestions: (type) => api.get(`/client/assessment/questions/${type}`),
+  getRecommendations: () => api.get('/client/assessment/recommendations'),
 
   // Reviews
   getReviews: () => api.get('/client/reviews'),
