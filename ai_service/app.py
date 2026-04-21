@@ -9,17 +9,16 @@ Node.js only sends assessment answers — all therapist data
 is fetched from the database here, no mock data anywhere.
 
 Endpoints:
-  POST /ai/assess          — ML assessment only (PHQ-9 or GAD-7)
+  POST /ai/assess           — XGBoost assessment only (PHQ-9 or GAD-7)
   POST /ai/assess-and-match — full pipeline: assess + DB fetch + KNN match
-  POST /ai/match           — KNN match using live DB therapist data
-  POST /ai/comorbidity     — cross-assessment comorbidity detection
-  GET  /ai/health          — health check
+  POST /ai/match            — KNN match using live DB therapist data
+  POST /ai/comorbidity      — cross-assessment comorbidity detection
+  GET  /ai/health           — health check
 """
 
 from flask import Flask, request, jsonify
 from ai_engine import run_assessment, detect_comorbidity, match_therapists
 from db import fetch_verified_therapists
-from rule_based_ai import process_user as rule_process_user
 
 app = Flask(__name__)
 
@@ -175,45 +174,6 @@ def comorbidity():
 
     return jsonify(detect_comorbidity(phq9, gad7))
 
-
-@app.post("/ai/rule-assess")
-def rule_assess():
-    """
-    Rule-based assessment + therapist matching (no ML).
-    Fetches therapists directly from MongoDB.
-
-    Body: { "type": "PHQ-9"|"GAD-7", "answers": [0-3, ...] }
-    """
-    body  = request.get_json(force=True)
-    atype = body.get("type", "").upper().replace("PHQ9", "PHQ-9").replace("GAD7", "GAD-7")
-
-    if atype not in ("PHQ-9", "GAD-7"):
-        return jsonify({"error": "type must be PHQ-9 or GAD-7"}), 400
-
-    try:
-        scores = _extract_scores(body.get("answers", []))
-    except (ValueError, KeyError) as e:
-        return jsonify({"error": str(e)}), 400
-
-    # Fetch live therapists from MongoDB and adapt to rule-based schema
-    raw_therapists = fetch_verified_therapists()
-    therapists = [
-        {
-            "name":               t["name"],
-            "specialization":     t["specialization"][0] if t["specialization"] else "",
-            "rating":             t["rating"],
-            "availability":       len(t["availability"]) > 0,
-            "verificationStatus": "VERIFIED",   # already filtered by fetch_verified_therapists
-        }
-        for t in raw_therapists
-    ]
-
-    try:
-        result = rule_process_user(scores, therapists, atype)
-    except ValueError as e:
-        return jsonify({"error": str(e)}), 400
-
-    return jsonify({"disclaimer": AI_DISCLAIMER, **result})
 
 
 if __name__ == "__main__":
