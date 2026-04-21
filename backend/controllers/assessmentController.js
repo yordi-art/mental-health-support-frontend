@@ -40,7 +40,12 @@ class AssessmentController {
         return res.status(400).json({ message: 'Invalid assessment type. Use PHQ-9 or GAD-7' });
       }
 
-      AssessmentService.validateAnswers(type, answers);
+      // Normalize answers — accept both [{score:N}] and [N] formats
+      const normalizedAnswers = answers.map(a =>
+        typeof a === 'object' && a !== null ? a : { score: Number(a) }
+      );
+
+      AssessmentService.validateAnswers(type, normalizedAnswers);
 
       // Check for previous opposite-type assessment (for comorbidity detection)
       const oppositeType = type === 'PHQ-9' ? 'GAD-7' : 'PHQ-9';
@@ -58,7 +63,7 @@ class AssessmentController {
       try {
         aiResult = await callAI('/ai/assess-and-match', {
           type,
-          answers,
+          answers: normalizedAnswers,
           previousAssessment,
         });
       } catch (aiErr) {
