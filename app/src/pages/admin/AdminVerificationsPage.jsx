@@ -1,19 +1,27 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Eye, AlertTriangle, ShieldOff, RefreshCw, ArrowLeft } from 'lucide-react';
-import { Link } from 'react-router-dom';
 import DashboardLayout from '../../layouts/DashboardLayout';
 import StatusBadge from '../../components/common/StatusBadge';
 import SearchBar from '../../components/common/SearchBar';
 import { adminSidebarItems } from '../../components/admin/adminNav';
-import { verificationQueue } from '../../data/sampleData';
+import { adminAPI } from '../../api';
 
 export default function AdminVerificationsPage() {
+  const [verifications, setVerifications] = useState([]);
   const [search, setSearch] = useState('');
   const [selected, setSelected] = useState(null);
+  const [loading, setLoading] = useState(true);
 
-  const filtered = verificationQueue.filter(v =>
-    v.name.toLowerCase().includes(search.toLowerCase()) ||
-    v.profession.toLowerCase().includes(search.toLowerCase())
+  useEffect(() => {
+    adminAPI.getVerifications()
+      .then(res => setVerifications(res.data?.verifications || res.data || []))
+      .catch(() => setVerifications([]))
+      .finally(() => setLoading(false));
+  }, []);
+
+  const filtered = verifications.filter(v =>
+    v.name?.toLowerCase().includes(search.toLowerCase()) ||
+    v.profession?.toLowerCase().includes(search.toLowerCase())
   );
 
   if (selected) {
@@ -26,26 +34,26 @@ export default function AdminVerificationsPage() {
           <div className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm">
             <div className="flex items-center justify-between mb-4">
               <h2 className="font-semibold text-slate-800">Verification Details</h2>
-              <StatusBadge status={selected.status} />
+              <StatusBadge status={selected.status || selected.verification?.status} />
             </div>
             <div className="grid grid-cols-2 gap-3 text-sm">
               {[
                 { label: 'Therapist Name', value: selected.name },
                 { label: 'Profession', value: selected.profession },
-                { label: 'License Number', value: selected.licenseNumber },
-                { label: 'Issuing Authority', value: selected.authority },
-                { label: 'Expiry Date', value: selected.expiry },
-                { label: 'Submitted', value: selected.submitted },
+                { label: 'License Number', value: selected.licenseNumber || selected.license?.licenseNumber },
+                { label: 'Issuing Authority', value: selected.authority || selected.license?.issuingAuthority },
+                { label: 'Expiry Date', value: selected.expiry || selected.license?.licenseExpiryDate?.slice(0, 10) },
+                { label: 'Submitted', value: selected.submitted || selected.createdAt?.slice(0, 10) },
               ].map(row => (
                 <div key={row.label} className="bg-gray-50 rounded-xl p-3">
                   <p className="text-xs text-gray-400 mb-0.5">{row.label}</p>
-                  <p className="font-medium text-slate-700">{row.value}</p>
+                  <p className="font-medium text-slate-700">{row.value || '—'}</p>
                 </div>
               ))}
             </div>
           </div>
 
-          {selected.confidence !== null && (
+          {selected.confidence != null && (
             <div className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm">
               <h2 className="font-semibold text-slate-800 mb-3">System Confidence Score</h2>
               <div className="flex items-center gap-3">
@@ -66,13 +74,16 @@ export default function AdminVerificationsPage() {
           )}
 
           <div className="flex flex-wrap gap-3">
-            <button className="flex items-center gap-2 bg-orange-100 text-orange-700 px-4 py-2 rounded-xl text-sm font-medium hover:bg-orange-200 transition">
+            <button onClick={() => adminAPI.flagVerification(selected._id || selected.id, 'Manual flag')}
+              className="flex items-center gap-2 bg-orange-100 text-orange-700 px-4 py-2 rounded-xl text-sm font-medium hover:bg-orange-200 transition">
               <AlertTriangle size={15} /> Flag Account
             </button>
-            <button className="flex items-center gap-2 bg-red-100 text-red-700 px-4 py-2 rounded-xl text-sm font-medium hover:bg-red-200 transition">
+            <button onClick={() => adminAPI.suspendTherapist(selected._id || selected.id)}
+              className="flex items-center gap-2 bg-red-100 text-red-700 px-4 py-2 rounded-xl text-sm font-medium hover:bg-red-200 transition">
               <ShieldOff size={15} /> Suspend Account
             </button>
-            <button className="flex items-center gap-2 bg-blue-100 text-blue-700 px-4 py-2 rounded-xl text-sm font-medium hover:bg-blue-200 transition">
+            <button onClick={() => adminAPI.requestReupload(selected._id || selected.id)}
+              className="flex items-center gap-2 bg-blue-100 text-blue-700 px-4 py-2 rounded-xl text-sm font-medium hover:bg-blue-200 transition">
               <RefreshCw size={15} /> Request Re-upload
             </button>
           </div>
@@ -102,13 +113,17 @@ export default function AdminVerificationsPage() {
               </tr>
             </thead>
             <tbody>
-              {filtered.map(v => (
-                <tr key={v.id} className="border-b border-gray-50 hover:bg-gray-50 transition">
+              {loading ? (
+                <tr><td colSpan={6} className="py-8 text-center text-sm text-gray-400">Loading...</td></tr>
+              ) : filtered.length === 0 ? (
+                <tr><td colSpan={6} className="py-8 text-center text-sm text-gray-400">No verifications found.</td></tr>
+              ) : filtered.map(v => (
+                <tr key={v._id || v.id} className="border-b border-gray-50 hover:bg-gray-50 transition">
                   <td className="px-4 py-3 font-medium text-slate-700">{v.name}</td>
-                  <td className="px-4 py-3 text-gray-500 capitalize">{v.profession}</td>
-                  <td className="px-4 py-3"><StatusBadge status={v.status} /></td>
+                  <td className="px-4 py-3 text-gray-500 capitalize">{v.profession || 'Therapist'}</td>
+                  <td className="px-4 py-3"><StatusBadge status={v.status || v.verification?.status} /></td>
                   <td className="px-4 py-3">
-                    {v.confidence !== null ? (
+                    {v.confidence != null ? (
                       <div className="flex items-center gap-2">
                         <div className="w-16 h-1.5 bg-gray-100 rounded-full overflow-hidden">
                           <div className={`h-full rounded-full ${v.confidence >= 80 ? 'bg-teal-500' : v.confidence >= 50 ? 'bg-yellow-400' : 'bg-red-400'}`}
@@ -118,13 +133,13 @@ export default function AdminVerificationsPage() {
                       </div>
                     ) : <span className="text-xs text-gray-400 animate-pulse">Processing...</span>}
                   </td>
-                  <td className="px-4 py-3 text-gray-500 text-xs">{v.submitted}</td>
+                  <td className="px-4 py-3 text-gray-500 text-xs">{v.submitted || v.createdAt?.slice(0, 10)}</td>
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-1">
                       <button onClick={() => setSelected(v)} title="View Details" className="p-1.5 rounded-lg hover:bg-blue-50 text-blue-500 transition"><Eye size={14} /></button>
-                      <button title="Flag" className="p-1.5 rounded-lg hover:bg-orange-50 text-orange-500 transition"><AlertTriangle size={14} /></button>
-                      <button title="Suspend" className="p-1.5 rounded-lg hover:bg-red-50 text-red-500 transition"><ShieldOff size={14} /></button>
-                      <button title="Request Re-upload" className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-500 transition"><RefreshCw size={14} /></button>
+                      <button onClick={() => adminAPI.flagVerification(v._id || v.id, 'Manual flag')} title="Flag" className="p-1.5 rounded-lg hover:bg-orange-50 text-orange-500 transition"><AlertTriangle size={14} /></button>
+                      <button onClick={() => adminAPI.suspendTherapist(v._id || v.id)} title="Suspend" className="p-1.5 rounded-lg hover:bg-red-50 text-red-500 transition"><ShieldOff size={14} /></button>
+                      <button onClick={() => adminAPI.requestReupload(v._id || v.id)} title="Request Re-upload" className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-500 transition"><RefreshCw size={14} /></button>
                     </div>
                   </td>
                 </tr>

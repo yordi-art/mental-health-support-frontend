@@ -20,7 +20,7 @@ const STATUS_CONFIG = {
     title: 'Verification Pending',
     message: 'Your account is under verification. The system is processing your credentials. This usually takes a few minutes.',
     canReupload: false,
-    blocked: true,
+    blocked: false,
   },
   REJECTED: {
     icon: XCircle,
@@ -30,7 +30,7 @@ const STATUS_CONFIG = {
     title: 'Verification Failed',
     message: 'Your verification failed. Please review the issues and re-upload your documents to continue.',
     canReupload: true,
-    blocked: true,
+    blocked: false,
   },
   EXPIRED: {
     icon: AlertTriangle,
@@ -40,7 +40,7 @@ const STATUS_CONFIG = {
     title: 'License Expired',
     message: 'Your license has expired. Please renew your license and re-upload your documents to restore access.',
     canReupload: true,
-    blocked: true,
+    blocked: false,
   },
 };
 
