@@ -30,12 +30,23 @@ export default function TherapistDashboard() {
   const { status, loading: vLoading, isVerified, isBlocked } = useVerificationStatus();
 
   const [dashboard, setDashboard] = useState(null);
+  const [clientRequests, setClientRequests] = useState([]);
+  const [reviews, setReviews] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     if (!vLoading) {
-      therapistAPI.getDashboard()
-        .then(res => setDashboard(res.data))
+      Promise.all([
+        therapistAPI.getDashboard(),
+        therapistAPI.getAppointments(),
+        therapistAPI.getReviews(),
+      ])
+        .then(([dash, appts, revs]) => {
+          setDashboard(dash.data);
+          const pending = (appts.data?.appointments || appts.data || []).filter(a => a.status === 'pending');
+          setClientRequests(pending);
+          setReviews(revs.data?.reviews || revs.data || []);
+        })
         .catch(() => {})
         .finally(() => setLoading(false));
     }
@@ -52,10 +63,10 @@ export default function TherapistDashboard() {
   }
 
   const appointments = dashboard?.todayAppointments || [];
-  const clientRequests = dashboard?.clientRequests || [];
   const availability = dashboard?.availability || [];
   const earnings = dashboard?.earnings;
   const stats = dashboard?.stats || {};
+  const avgRating = reviews.length ? (reviews.reduce((s, r) => s + (r.rating || 0), 0) / reviews.length).toFixed(1) : null;
 
   return (
     <DashboardLayout sidebarItems={therapistSidebarItems} userName={name}>
@@ -64,7 +75,7 @@ export default function TherapistDashboard() {
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         <DashboardCard title="Total Appointments" value={isVerified ? (stats.totalAppointments ?? '—') : '—'} icon={Calendar} sub={isVerified ? `This month: ${stats.monthlyAppointments ?? 0}` : 'Locked'} color="text-primary" />
         <DashboardCard title="Active Clients" value={isVerified ? (stats.activeClients ?? '—') : '—'} icon={Users} sub={isVerified ? `${stats.newRequests ?? 0} new requests` : 'Locked'} color="text-teal-600" />
-        <DashboardCard title="Average Rating" value={isVerified ? (stats.avgRating ? `${stats.avgRating}★` : '—') : '—'} icon={Star} sub={isVerified ? `${stats.reviewCount ?? 0} reviews` : 'Locked'} color="text-warning" />
+        <DashboardCard title="Average Rating" value={isVerified ? (avgRating ? `${avgRating}★` : '—') : '—'} icon={Star} sub={isVerified ? `${reviews.length} reviews` : 'Locked'} color="text-warning" />
         <DashboardCard title="Total Earnings" value={isVerified ? (stats.totalEarnings ? `ETB ${stats.totalEarnings.toLocaleString()}` : '—') : '—'} icon={DollarSign} sub={isVerified ? `This month: ${stats.monthlyEarnings ?? 0}` : 'Locked'} color="text-success" />
       </div>
 
@@ -108,22 +119,22 @@ export default function TherapistDashboard() {
                 <p className="text-sm text-gray-400 text-center py-6">No pending requests.</p>
               ) : (
                 <div className="space-y-3">
-                  {clientRequests.map(r => (
-                    <div key={r._id} className="flex items-center gap-3 p-3 rounded-xl border border-gray-100">
+                  {clientRequests.map(a => (
+                    <div key={a._id} className="flex items-center gap-3 p-3 rounded-xl border border-gray-100">
                       <div className="w-10 h-10 rounded-full bg-teal-100 text-teal-700 flex items-center justify-center font-bold text-sm">
-                        {r.clientName?.[0] || 'C'}
+                        {a.clientId?.name?.[0] || 'C'}
                       </div>
                       <div className="flex-1">
-                        <p className="font-medium text-sm text-slate-700">{r.clientName}</p>
-                        <p className="text-xs text-gray-500">{r.issue} · Requested {r.date}</p>
+                        <p className="font-medium text-sm text-slate-700">{a.clientId?.name || 'Client'}</p>
+                        <p className="text-xs text-gray-500">{a.sessionType || 'Session'} · Requested {a.date?.slice(0, 10)}</p>
                       </div>
                       <div className="flex gap-2">
                         <button
-                          onClick={() => therapistAPI.respondToRequest(r._id, 'accept')}
+                          onClick={() => therapistAPI.updateAppointmentStatus(a._id, 'confirmed').then(() => setClientRequests(clientRequests.filter(r => r._id !== a._id)))}
                           className="text-xs bg-teal-500 text-white px-3 py-1.5 rounded-lg hover:bg-teal-600 transition"
                         >Accept</button>
                         <button
-                          onClick={() => therapistAPI.respondToRequest(r._id, 'decline')}
+                          onClick={() => therapistAPI.updateAppointmentStatus(a._id, 'cancelled').then(() => setClientRequests(clientRequests.filter(r => r._id !== a._id)))}
                           className="text-xs border border-gray-200 text-gray-500 px-3 py-1.5 rounded-lg hover:bg-gray-50 transition"
                         >Decline</button>
                       </div>
