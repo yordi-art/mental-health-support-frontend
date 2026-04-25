@@ -118,6 +118,55 @@ class AssessmentController {
     }
   }
 
+  /**
+   * POST /assessment/process
+   * Client submits assessment → backend calculates severity →
+   * calls Python matching function → returns recommended therapists.
+   *
+   * Response: { assessment: {...}, recommendations: [...] }
+   */
+  static async processAssessment(req, res) {
+    try {
+      const { type, answers } = req.body;
+
+      if (!['PHQ-9', 'GAD-7'].includes(type))
+        return res.status(400).json({ message: 'Invalid assessment type. Use PHQ-9 or GAD-7' });
+
+      const normalizedAnswers = answers.map(a =>
+        typeof a === 'object' && a !== null ? a : { score: Number(a) }
+      );
+      AssessmentService.validateAnswers(type, normalizedAnswers);
+
+      let result;
+      try {
+        result = await callAI('/api/assessment/process', { type, answers: normalizedAnswers });
+      } catch (aiErr) {
+        // JS fallback: calculate severity locally, return empty recommendations
+        console.warn('[AI] Python service unavailable, using JS fallback:', aiErr.message);
+        const jsResult = type === 'PHQ-9'
+          ? AssessmentService.calculatePHQ9Score(normalizedAnswers)
+          : AssessmentService.calculateGAD7Score(normalizedAnswers);
+        result = { assessment: jsResult, recommendations: [] };
+      }
+
+      const saved = await Assessment.create({
+        userId:         req.user._id,
+        type,
+        answers,
+        totalScore:     result.assessment.rawScore,
+        resultCategory: result.assessment.severity,
+        interpretation: result.assessment.interpretation,
+      });
+
+      res.status(201).json({
+        assessment:      { id: saved._id, ...result.assessment },
+        recommendations: result.recommendations,
+      });
+    } catch (error) {
+      res.status(500).json({ message: 'Failed to process assessment', error: error.message });
+    }
+  }
+
   // GET /assessment/results
   static async getAssessmentResults(req, res) {
     try {

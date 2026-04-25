@@ -104,6 +104,7 @@ router.get('/payments/:id', PaymentController.getPaymentById);
 // Assessments — AI-powered scoring & therapist matching
 router.get('/assessment/questions/:type', AssessmentController.getQuestions);
 router.post('/assessment', AssessmentController.submitAssessment);          // returns score + matched therapists
+router.post('/assessment/process', AssessmentController.processAssessment); // severity + Python matching
 router.get('/assessment/results', AssessmentController.getAssessmentResults);
 router.get('/assessment/latest', AssessmentController.getLatestAssessment);
 router.get('/assessment/recommendations', AssessmentController.getRecommendations); // re-run matching on latest

@@ -373,5 +373,103 @@ def verify():
     return jsonify({"disclaimer": AI_DISCLAIMER, **result})
 
 
+# ─── Assessment Process Endpoint ────────────────────────────────────────────
+# Verification bypass is enabled only for development/testing and must be disabled in production.
+
+# Severity → required therapist role keywords (matching rules per spec)
+_ROLE_MAP = {
+    "minimal":  ["counselor", "counseling"],
+    "mild":     ["counselor", "counseling", "therapist", "therapy"],
+    "moderate": ["therapist", "therapy", "psychotherapy", "cbt", "clinical"],
+    "severe":   ["clinical psychologist", "psychiatry", "clinical"],
+}
+
+
+def _severity_from_score(score: int) -> str:
+    """Rule-based severity classification (PHQ-9 / GAD-7 shared thresholds)."""
+    if score <= 4:  return "minimal"
+    if score <= 9:  return "mild"
+    if score <= 14: return "moderate"
+    return "severe"
+
+
+def match_therapists_by_role(severity: str, therapists: list) -> list:
+    """
+    Python matching function.
+    Filters: verificationStatus == VERIFIED and availability == True.
+    Applies severity-to-role matching rules.
+    Sorts by rating descending.
+
+    Matching rules:
+      Minimal  → counselor
+      Mild     → counselor or therapist
+      Moderate → therapist
+      Severe   → clinical psychologist
+    """
+    keywords = _ROLE_MAP.get(severity.lower(), _ROLE_MAP["mild"])
+
+    def _matches(t):
+        specs = " ".join(t.get("specialization", [])).lower()
+        return any(kw in specs for kw in keywords)
+
+    # Filter: verified + available + role match
+    filtered = [
+        t for t in therapists
+        if t.get("verificationStatus", t.get("verification", {}).get("status", "")) == "VERIFIED"
+        and (t.get("availability") or t.get("availabilityCount", 0) > 0)
+        and _matches(t)
+    ]
+
+    # Sort by rating descending
+    filtered.sort(key=lambda t: t.get("rating", 0), reverse=True)
+    return filtered
+
+
+@app.post("/api/assessment/process")
+def process_assessment():
+    """
+    POST /api/assessment/process
+
+    Client submits assessment → backend calculates severity →
+    calls Python matching function → returns recommended therapists.
+
+    Body:
+      {
+        "type":    "PHQ-9" | "GAD-7",
+        "answers": [{"score": 0-3}, ...]
+      }
+
+    Response:
+      { "assessment": {...}, "recommendations": [...] }
+    """
+    body  = request.get_json(force=True)
+    atype = body.get("type", "").upper().replace("PHQ9", "PHQ-9").replace("GAD7", "GAD-7")
+
+    if atype not in ("PHQ-9", "GAD-7"):
+        return jsonify({"error": "type must be PHQ-9 or GAD-7"}), 400
+
+    try:
+        scores = _extract_scores(body.get("answers", []))
+        _validate(atype, scores)
+    except (ValueError, KeyError) as e:
+        return jsonify({"error": str(e)}), 400
+
+    # Step 1 — Calculate severity
+    assessment_result = run_assessment(atype, scores)
+    severity = assessment_result["severity"]
+
+    # Step 2 — Fetch verified + available therapists from MongoDB
+    therapists = fetch_verified_therapists()
+
+    # Step 3 — Call Python matching function
+    recommendations = match_therapists_by_role(severity, therapists)
+
+    return jsonify({
+        "disclaimer":     AI_DISCLAIMER,
+        "assessment":     assessment_result,
+        "recommendations": recommendations,
+    })
+
+
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=8000, debug=False)

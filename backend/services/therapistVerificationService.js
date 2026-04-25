@@ -5,6 +5,7 @@ const { sendEmail } = require('./emailService');
 const ocrService = require('./ocrService');
 const { extractLicenseData } = require('./licenseExtractor');
 const { validateLicenseData } = require('./licenseValidator');
+const { DEV_MODE } = require('../config/devMode');
 
 /**
  * Therapist Verification Service
@@ -117,12 +118,40 @@ class TherapistVerificationService {
    * @returns {object} { status, notes, verifiedAt, ocrDetails }
    */
   static async verifyTherapist(therapistDoc, fileBuffer = null, fileMimetype = null) {
-    // Verification disabled — auto-approve all therapists
+    // Verification bypass is enabled only for development/testing and must be disabled in production.
+    if (DEV_MODE) {
+      return {
+        status: 'VERIFIED',
+        notes: 'DEV_MODE: Verification bypassed for testing.',
+        verifiedAt: new Date(),
+        ocrDetails: null,
+      };
+    }
+
+    // ── Full verification pipeline (runs when DEV_MODE = false) ──────────────
+
+    // Step 1: Rule-based checks
+    const ruleResult = this._runRuleChecks(therapistDoc);
+    if (ruleResult) {
+      return { ...ruleResult, verifiedAt: new Date(), ocrDetails: null };
+    }
+
+    // Step 2 & 3: OCR pipeline
+    const ocr = await this._runOCRVerification(
+      fileBuffer,
+      fileMimetype,
+      therapistDoc.license
+    );
+
+    if (ocr.decision === 'OCR_PASSED') {
+      return { status: 'VERIFIED', notes: 'All checks passed.', verifiedAt: new Date(), ocrDetails: ocr.ocrDetails };
+    }
+
     return {
-      status: 'VERIFIED',
-      notes: 'Automatically verified.',
+      status: ocr.decision === 'REJECTED' ? 'REJECTED' : 'PENDING',
+      notes: ocr.notes,
       verifiedAt: new Date(),
-      ocrDetails: null,
+      ocrDetails: ocr.ocrDetails,
     };
   }
 
