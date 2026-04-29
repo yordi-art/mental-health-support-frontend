@@ -31,6 +31,7 @@ from verifier import verify_document
 from ocr_service import extract_text
 from validation_service import validate
 from ml_service import predict
+from recommendation_engine import recommend_therapists
 
 app = Flask(__name__)
 
@@ -61,6 +62,36 @@ def _validate(assessment_type: str, scores: list):
 @app.get("/favicon.ico")
 def favicon():
     return '', 204
+
+
+@app.post("/ai/recommend")
+def ai_recommend():
+    """
+    POST /ai/recommend
+    Rule-based therapist recommendation from assessment result.
+    Fetches VERIFIED therapists directly from MongoDB — no mock data.
+
+    Body: { "score": 12, "severity": "Moderate", "type": "PHQ-9" }
+    Returns: sorted list of recommended therapists with match_score and reason.
+    """
+    body = request.get_json(force=True)
+    assessment = {
+        "score":    body.get("score", 0),
+        "severity": body.get("severity", "mild"),
+        "type":     body.get("type", "PHQ-9"),
+    }
+
+    therapists = fetch_verified_therapists()
+    recommendations = recommend_therapists(assessment, therapists)
+
+    if not recommendations:
+        return jsonify({"message": "No suitable therapist available. Please try again later."}), 200
+
+    return jsonify({
+        "disclaimer": AI_DISCLAIMER,
+        "assessment": assessment,
+        "recommendedTherapists": recommendations,
+    })
 
 
 @app.get("/ai/health")

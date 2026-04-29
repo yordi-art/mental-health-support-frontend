@@ -69,8 +69,13 @@ def fetch_verified_therapists():
             'hourlyRate':       t.get('hourlyRate', 0),
             'availability':     availability,
             'availabilityCount': len(availability),
+            'availability':     True,                          # has slots → available
+            'verificationStatus': 'VERIFIED',                  # already filtered above
             'rating':           avg_rating,
-            'bookingOption':    True,
+            'reviewCount':      len(reviews),
+            'bio':              t.get('bio', ''),
+            'workplace':        t.get('workplace', ''),
+            'languages':        t.get('languages', []),
         })
 
     return results

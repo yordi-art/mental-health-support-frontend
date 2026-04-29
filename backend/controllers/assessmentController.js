@@ -200,20 +200,55 @@ class AssessmentController {
         return res.status(404).json({ message: 'No assessment found. Please complete an assessment first.' });
       }
 
-      let result;
+      let recommendedTherapists = [];
       try {
-        result = await callAI('/ai/match', {
+        const result = await callAI('/ai/recommend', {
+          score:    latest.totalScore,
           severity: latest.resultCategory,
+          type:     latest.type,
         });
-      } catch (aiErr) {
-        console.warn('[AI] Python service unavailable for recommendations:', aiErr.message);
-        return res.status(503).json({ message: 'AI service temporarily unavailable. Please try again.' });
+        recommendedTherapists = result.recommendedTherapists || [];
+      } catch {
+        // Python offline — fall back to JS rule-based matching from DB
+        const Therapist = require('../models/Therapist');
+        const Review    = require('../models/Review');
+        const therapists = await Therapist.find({ 'verification.status': 'VERIFIED', 'availability.0': { $exists: true } })
+          .populate('userId', 'name profileImage').lean();
+
+        const SEVERITY_KEYWORDS = {
+          minimal:  ['counselor', 'counseling'],
+          mild:     ['counselor', 'therapist', 'counseling'],
+          moderate: ['therapist', 'therapy', 'psychotherapy', 'cbt'],
+          severe:   ['clinical psychologist', 'clinical', 'psychiatry'],
+        };
+        const keywords = SEVERITY_KEYWORDS[latest.resultCategory?.toLowerCase()] || SEVERITY_KEYWORDS.mild;
+
+        recommendedTherapists = therapists
+          .map(t => {
+            const specs = (t.specialization || []).join(' ').toLowerCase();
+            const specScore = keywords.some(k => specs.includes(k)) ? 2 : 1;
+            return {
+              id:             String(t._id),
+              name:           t.userId?.name,
+              profileImage:   t.userId?.profileImage,
+              specialization: t.specialization,
+              rating:         t.rating || 0,
+              match_score:    specScore + (t.rating || 0),
+              reason:         `Matches ${latest.resultCategory} severity`,
+              hourlyRate:     t.hourlyRate,
+              experienceYears: t.experienceYears,
+              bio:            t.bio,
+              availability:   true,
+              verificationStatus: 'VERIFIED',
+            };
+          })
+          .sort((a, b) => b.match_score - a.match_score)
+          .slice(0, 5);
       }
 
       res.json({
         basedOn:               { type: latest.type, severity: latest.resultCategory, score: latest.totalScore },
-        disclaimer:            result.disclaimer,
-        recommendedTherapists: result.recommendedTherapists,
+        recommendedTherapists,
       });
     } catch (error) {
       res.status(500).json({ message: 'Failed to get recommendations', error: error.message });

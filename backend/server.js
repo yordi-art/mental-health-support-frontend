@@ -43,6 +43,7 @@ mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/mental-he
 app.use('/api/auth', require('./routes/auth'));
 app.use('/api/client', require('./routes/client'));
 app.use('/api/therapist', require('./routes/therapist'));
+app.use('/api/therapists', require('./routes/therapists'));
 app.use('/api/admin', require('./routes/admin'));
 app.use('/api/notifications', require('./routes/notifications'));
 
