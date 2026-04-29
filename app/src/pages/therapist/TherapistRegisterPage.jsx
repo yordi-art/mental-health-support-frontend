@@ -1,6 +1,23 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Heart, Upload, CheckCircle, XCircle, AlertTriangle, Clock, ArrowLeft, ArrowRight, Loader2 } from 'lucide-react';
+import { Heart, Upload, CheckCircle, XCircle, AlertTriangle, Clock, ArrowLeft, ArrowRight, Loader2, X } from 'lucide-react';
+
+const SPECIALIZATIONS = [
+  'Anxiety & Depression',
+  'Trauma & PTSD',
+  'Stress & Burnout',
+  'Relationship Issues',
+  'Grief & Loss',
+  'Child & Adolescent',
+  'Addiction & Recovery',
+  'Eating Disorders',
+  'OCD',
+  'Bipolar Disorder',
+  'Schizophrenia',
+  'Family Therapy',
+  'Career Counseling',
+  'Sleep Disorders',
+];
 import { therapistAPI } from '../../api';
 import { useAuth } from '../../context/AuthContext';
 
@@ -25,7 +42,7 @@ function validateStep(step, form) {
     if (!form.dob)                   errs.dob       = 'Date of birth is required';
   }
   if (step === 1) {
-    if (!form.specialization.trim()) errs.specialization = 'At least one specialization is required';
+    if (!form.specialization.length) errs.specialization = 'At least one specialization is required';
     if (!form.experience)            errs.experience     = 'Years of experience is required';
     if (!form.workplace.trim())      errs.workplace      = 'Workplace is required';
     if (!form.bio.trim())            errs.bio            = 'Professional bio is required';
@@ -151,7 +168,7 @@ export default function TherapistRegisterPage() {
   const [form, setForm] = useState({
     fullName: basic.name || '', email: basic.email || '', password: basic.password || '',
     phone: '', gender: '', dob: '',
-    specialization: '', experience: '', workplace: '', bio: '', hourlyRate: '',
+    specialization: [], experience: '', workplace: '', bio: '', hourlyRate: '',
     degreeType: '', field: '', institution: '', graduationYear: '',
     hasCOC: false, examPassed: false,
     licenseNumber: '', issuingAuthority: '', issueDate: '', expiryDate: '', licenseFile: null,
@@ -205,7 +222,7 @@ export default function TherapistRegisterPage() {
       fd.append('gender',      form.gender);
       fd.append('dateOfBirth', form.dob);
       fd.append('therapistData', JSON.stringify({
-        specialization:  form.specialization.split(',').map(s => s.trim()).filter(Boolean),
+        specialization:  form.specialization,
         experienceYears: Number(form.experience) || 0,
         bio:             form.bio,
         workplace:       form.workplace,
@@ -321,7 +338,6 @@ export default function TherapistRegisterPage() {
                         <option value="">Select gender</option>
                         <option value="female">Female</option>
                         <option value="male">Male</option>
-                        <option value="other">Other</option>
                       </select>
                       <Err k="gender" />
                     </div>
@@ -340,8 +356,34 @@ export default function TherapistRegisterPage() {
                   <p className="font-semibold text-slate-700 mb-3">Professional Information</p>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div className="sm:col-span-2">
-                      <label className={labelCls}>Specialization <span className="text-red-400">*</span> <span className="text-gray-400 font-normal">(comma-separated)</span></label>
-                      <input {...f('specialization')} placeholder="Anxiety & Depression, Trauma, PTSD" className={fieldCls('specialization')} />
+                      <label className={labelCls}>Specialization <span className="text-red-400">*</span></label>
+                      <select
+                        className={fieldCls('specialization')}
+                        value=""
+                        onChange={e => {
+                          const val = e.target.value;
+                          if (val && !form.specialization.includes(val)) {
+                            set('specialization', [...form.specialization, val]);
+                          }
+                        }}
+                      >
+                        <option value="">Select a specialization…</option>
+                        {SPECIALIZATIONS.filter(s => !form.specialization.includes(s)).map(s => (
+                          <option key={s} value={s}>{s}</option>
+                        ))}
+                      </select>
+                      {form.specialization.length > 0 && (
+                        <div className="flex flex-wrap gap-1.5 mt-2">
+                          {form.specialization.map(s => (
+                            <span key={s} className="inline-flex items-center gap-1 bg-blue-50 text-primary text-xs font-medium px-2.5 py-1 rounded-full border border-blue-100">
+                              {s}
+                              <button type="button" onClick={() => set('specialization', form.specialization.filter(x => x !== s))} className="hover:text-red-500 transition">
+                                <X size={11} />
+                              </button>
+                            </span>
+                          ))}
+                        </div>
+                      )}
                       <Err k="specialization" />
                     </div>
                     <div>
