@@ -246,7 +246,7 @@ export default function TherapistRegisterPage() {
                       <select {...f('issuingAuthority')} className={inputCls}>
                         <option value="">Select authority</option>
                         <option value="Ministry of Health">Ministry of Health</option>
-                        <option value="Regional Bureau of Health">Regional Bureau of Health</option>
+                        <option value="Regional Health Bureau">Regional Health Bureau</option>
                         <option value="Other">Other</option>
                       </select>
                     </div>

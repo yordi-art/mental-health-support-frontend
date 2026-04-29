@@ -2,20 +2,38 @@ const Therapist = require('../models/Therapist');
 const User = require('../models/User');
 const { notify } = require('./notificationService');
 const { sendEmail } = require('./emailService');
-const ocrService = require('./ocrService');
-const { extractLicenseData } = require('./licenseExtractor');
-const { validateLicenseData } = require('./licenseValidator');
 const { DEV_MODE } = require('../config/devMode');
 
+const AI_SERVICE_URL = process.env.AI_SERVICE_URL || 'http://localhost:8000';
+
 /**
- * Therapist Verification Service
- *
- * Verification pipeline:
- *  1. Rule-based checks (expiry, education, authority, competency)
- *  2. OCR extraction from uploaded document (if file buffer provided)
- *  3. Cross-validation of OCR data vs user input
- *  4. Final decision
+ * Call the Python /verify-license endpoint.
+ * Sends the file buffer + therapist name as multipart/form-data.
  */
+async function callPythonVerifier(fileBuffer, fileMimetype, filename, therapistName) {
+  const FormData = (await import('node-fetch')).default ? null : null;
+  // Use built-in fetch (Node 18+) with FormData
+  const { FormData: FD, Blob } = await import('node:buffer').catch(() => ({}));
+
+  // Fallback: use the 'form-data' npm package if available
+  let form;
+  try {
+    const FormDataPkg = require('form-data');
+    form = new FormDataPkg();
+    form.append('file', fileBuffer, { filename: filename || 'license.pdf', contentType: fileMimetype });
+    form.append('therapist_name', therapistName);
+
+    const nodeFetch = require('node-fetch');
+    const res = await nodeFetch(`${AI_SERVICE_URL}/verify-license`, {
+      method: 'POST',
+      body: form,
+      headers: form.getHeaders(),
+    });
+    return await res.json();
+  } catch (e) {
+    throw new Error(`Python verifier unreachable: ${e.message}`);
+  }
+}
 
 class TherapistVerificationService {
 
@@ -38,7 +56,7 @@ class TherapistVerificationService {
       return { status: 'REJECTED', notes: 'License number is missing or invalid.' };
     }
 
-    const validAuthorities = ['Ministry of Health', 'Regional Bureau of Health', 'Other'];
+    const validAuthorities = ['Ministry of Health', 'Regional Health Bureau', 'Other'];
     if (!validAuthorities.includes(therapist.license.issuingAuthority)) {
       return { status: 'REJECTED', notes: 'Invalid issuing authority.' };
     }
@@ -48,116 +66,77 @@ class TherapistVerificationService {
       return { status: 'PENDING', notes: 'Awaiting competency certification (COC or licensing exam).' };
     }
 
-    return null; // all rule checks passed
+    return null;
   }
 
-  // ─── Step 2 & 3: OCR pipeline ──────────────────────────────────────────────
+  // ─── Step 2: Python AI verifier ────────────────────────────────────────────
 
-  static async _runOCRVerification(fileBuffer, fileMimetype, licenseInput) {
-    // No file provided — skip OCR
+  static async _runAIVerification(fileBuffer, fileMimetype, filename, therapistName) {
     if (!fileBuffer) {
       return {
-        ocrAttempted: false,
         decision: 'PENDING',
         notes: 'No license document uploaded. Please upload your license image or PDF.',
-        ocrDetails: null,
+        aiDetails: null,
       };
     }
 
     try {
-      // Extract text via Google Vision
-      const ocrResult = await ocrService.extractText({ buffer: fileBuffer, mimetype: fileMimetype, size: fileBuffer.length });
+      const aiResult = await callPythonVerifier(fileBuffer, fileMimetype, filename, therapistName);
 
-      if (!ocrResult.success) {
-        return {
-          ocrAttempted: true,
-          decision: 'PENDING',
-          notes: `Unable to read document: ${ocrResult.error}. Please upload a clearer image.`,
-          ocrDetails: { success: false, error: ocrResult.error },
-        };
-      }
-
-      // Parse structured fields from raw text
-      const extracted = extractLicenseData(ocrResult.text);
-
-      // Validate extracted data against user input
-      const validation = validateLicenseData(extracted, licenseInput, ocrResult.confidence);
+      // Map Python status → internal decision
+      const decisionMap = { approved: 'AI_PASSED', review_required: 'PENDING', rejected: 'REJECTED' };
+      const decision = decisionMap[aiResult.status] || 'PENDING';
 
       return {
-        ocrAttempted: true,
-        decision: validation.decision,   // 'OCR_PASSED' | 'REJECTED' | 'PENDING'
-        notes: validation.notes,
-        ocrDetails: {
-          success: true,
-          confidence: ocrResult.confidence,
-          wordCount: ocrResult.wordCount,
-          extractedFields: extracted.extractedFields,
-          unextracted: extracted.unmatched,
-          checks: validation.checks,
-          mismatches: validation.mismatches,
+        decision,
+        notes: aiResult.issues?.length
+          ? `AI verification: ${aiResult.issues.join('; ')}`
+          : 'AI verification passed.',
+        aiDetails: {
+          status: aiResult.status,
+          confidence: aiResult.confidence,
+          ml_prediction: aiResult.ml_prediction,
+          features: aiResult.features,
+          issues: aiResult.issues,
         },
       };
     } catch (err) {
-      // OCR service unavailable (e.g. no credentials) — degrade gracefully
-      console.warn('[OCR] Service unavailable:', err.message);
+      console.warn('[AI Verifier] Unavailable:', err.message);
       return {
-        ocrAttempted: true,
         decision: 'PENDING',
-        notes: 'Automatic document verification is temporarily unavailable. Your submission has been queued for manual review.',
-        ocrDetails: { success: false, error: err.message },
+        notes: 'Automatic document verification is temporarily unavailable. Queued for manual review.',
+        aiDetails: { error: err.message },
       };
     }
   }
 
   // ─── Main verification entry point ─────────────────────────────────────────
 
-  /**
-   * @param {object} therapistDoc  - Mongoose Therapist document
-   * @param {Buffer} [fileBuffer]  - raw file buffer from multer
-   * @param {string} [fileMimetype]
-   * @returns {object} { status, notes, verifiedAt, ocrDetails }
-   */
-  static async verifyTherapist(therapistDoc, fileBuffer = null, fileMimetype = null) {
-    // Verification bypass is enabled only for development/testing and must be disabled in production.
+  static async verifyTherapist(therapistDoc, fileBuffer = null, fileMimetype = null, filename = null) {
     if (DEV_MODE) {
-      return {
-        status: 'VERIFIED',
-        notes: 'DEV_MODE: Verification bypassed for testing.',
-        verifiedAt: new Date(),
-        ocrDetails: null,
-      };
+      return { status: 'VERIFIED', notes: 'DEV_MODE: Verification bypassed for testing.', verifiedAt: new Date(), aiDetails: null };
     }
 
-    // ── Full verification pipeline (runs when DEV_MODE = false) ──────────────
-
-    // Step 1: Rule-based checks
     const ruleResult = this._runRuleChecks(therapistDoc);
-    if (ruleResult) {
-      return { ...ruleResult, verifiedAt: new Date(), ocrDetails: null };
+    if (ruleResult) return { ...ruleResult, verifiedAt: new Date(), aiDetails: null };
+
+    const therapistName = (await User.findById(therapistDoc.userId))?.name || '';
+    const ai = await this._runAIVerification(fileBuffer, fileMimetype, filename, therapistName);
+
+    if (ai.decision === 'AI_PASSED') {
+      return { status: 'VERIFIED', notes: 'All checks passed.', verifiedAt: new Date(), aiDetails: ai.aiDetails };
     }
-
-    // Step 2 & 3: OCR pipeline
-    const ocr = await this._runOCRVerification(
-      fileBuffer,
-      fileMimetype,
-      therapistDoc.license
-    );
-
-    if (ocr.decision === 'OCR_PASSED') {
-      return { status: 'VERIFIED', notes: 'All checks passed.', verifiedAt: new Date(), ocrDetails: ocr.ocrDetails };
-    }
-
     return {
-      status: ocr.decision === 'REJECTED' ? 'REJECTED' : 'PENDING',
-      notes: ocr.notes,
+      status: ai.decision === 'REJECTED' ? 'REJECTED' : 'PENDING',
+      notes: ai.notes,
       verifiedAt: new Date(),
-      ocrDetails: ocr.ocrDetails,
+      aiDetails: ai.aiDetails,
     };
   }
 
   // ─── Register new therapist ─────────────────────────────────────────────────
 
-  static async registerTherapist(userId, therapistData, fileBuffer = null, fileMimetype = null) {
+  static async registerTherapist(userId, therapistData, fileBuffer = null, fileMimetype = null, filename = null) {
     const therapist = new Therapist({
       userId,
       specialization: therapistData.specialization,
@@ -172,29 +151,29 @@ class TherapistVerificationService {
       verification: { status: 'PENDING', notes: 'Verification in progress...', verifiedAt: null },
     });
 
-    const result = await this.verifyTherapist(therapist, fileBuffer, fileMimetype);
+    const result = await this.verifyTherapist(therapist, fileBuffer, fileMimetype, filename);
 
     therapist.verification = {
       status: result.status,
       notes: result.notes,
       verifiedAt: result.verifiedAt,
+      confidence: result.aiDetails?.confidence ? Math.round(result.aiDetails.confidence * 100) : null,
     };
 
     await therapist.save();
 
-    // Notify
     const user = await User.findById(userId);
     if (user) {
       await notify(userId, `Verification status: ${result.status} — ${result.notes}`, 'verification_status', therapist._id);
       sendEmail(user.email, 'therapistVerification', { name: user.name, status: result.status, notes: result.notes });
     }
 
-    return { therapist, ocrDetails: result.ocrDetails };
+    return { therapist, aiDetails: result.aiDetails };
   }
 
   // ─── Re-upload and re-verify ────────────────────────────────────────────────
 
-  static async reuploadLicense(userId, licenseData, fileBuffer = null, fileMimetype = null) {
+  static async reuploadLicense(userId, licenseData, fileBuffer = null, fileMimetype = null, filename = null) {
     const therapist = await Therapist.findOne({ userId });
     if (!therapist) throw new Error('Therapist not found');
 
@@ -202,16 +181,17 @@ class TherapistVerificationService {
     therapist.verification = { status: 'PENDING', notes: 'Re-verification in progress...', verifiedAt: null };
     await therapist.save();
 
-    const result = await this.verifyTherapist(therapist, fileBuffer, fileMimetype);
+    const result = await this.verifyTherapist(therapist, fileBuffer, fileMimetype, filename);
 
     therapist.verification = {
       status: result.status,
       notes: result.notes,
       verifiedAt: result.verifiedAt,
+      confidence: result.aiDetails?.confidence ? Math.round(result.aiDetails.confidence * 100) : null,
     };
     await therapist.save();
 
-    return { therapist, ocrDetails: result.ocrDetails };
+    return { therapist, aiDetails: result.aiDetails };
   }
 
   // ─── Helpers ────────────────────────────────────────────────────────────────

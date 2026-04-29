@@ -37,7 +37,7 @@ const therapistSchema = new mongoose.Schema({
   // Step 3 — License
   license: {
     licenseNumber:    { type: String, required: true, unique: true },
-    issuingAuthority: { type: String, enum: ['Ministry of Health', 'Regional Bureau of Health', 'Other'] },
+    issuingAuthority: { type: String, enum: ['Ministry of Health', 'Regional Health Bureau', 'Other'] },
     issueDate:        { type: Date, default: null },
     licenseExpiryDate:{ type: Date },
     licenseDocument:  { type: String, default: null }   // filename or URL

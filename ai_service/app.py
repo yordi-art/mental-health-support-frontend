@@ -21,10 +21,16 @@ Endpoints:
   POST /verify              — document text → Approved / Rejected
 """
 
+import sys, os
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'license_verifier'))
+
 from flask import Flask, request, jsonify
 from ai_engine import run_assessment, detect_comorbidity, match_therapists
 from db import fetch_verified_therapists
 from verifier import verify_document
+from ocr_service import extract_text
+from validation_service import validate
+from ml_service import predict
 
 app = Flask(__name__)
 
@@ -51,6 +57,11 @@ def _validate(assessment_type: str, scores: list):
             raise ValueError(f"Score at question {i+1} must be 0–3, got {s}")
 
 # ─── Routes ───────────────────────────────────────────────────────────────────
+
+@app.get("/favicon.ico")
+def favicon():
+    return '', 204
+
 
 @app.get("/ai/health")
 def health():
@@ -180,6 +191,57 @@ def comorbidity():
 
     return jsonify(detect_comorbidity(phq9, gad7))
 
+
+
+# ─── License Verification Endpoint ──────────────────────────────────────────
+# This system uses AI-assisted validation. Final verification should not replace
+# official regulatory approval.
+
+@app.post("/verify-license")
+def verify_license_endpoint():
+    """
+    POST /verify-license  (multipart/form-data)
+      file           : PDF or image (required)
+      therapist_name : string (required)
+    """
+    if 'file' not in request.files or not request.files['file'].filename:
+        return jsonify({"status": "rejected", "issues": ["no document uploaded"]}), 400
+
+    therapist_name = (request.form.get('therapist_name') or '').strip()
+    if not therapist_name:
+        return jsonify({"error": "therapist_name is required"}), 400
+
+    uploaded = request.files['file']
+    try:
+        file_bytes = uploaded.read()
+        text = extract_text(file_bytes, uploaded.filename)
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 415
+    except Exception as e:
+        return jsonify({"error": f"OCR failed: {e}"}), 500
+
+    result = validate(text, therapist_name, document_uploaded=True)
+
+    if result.status == "rejected":
+        return jsonify({
+            "status": "rejected",
+            "confidence": result.score,
+            "ml_prediction": None,
+            "features": result.features,
+            "issues": result.issues,
+        })
+
+    ml_label, ml_conf = predict(result.features)
+    blended = round(result.score * 0.7 + ml_conf * 0.3, 4)
+    final_status = "approved" if blended >= 0.8 else "review_required"
+
+    return jsonify({
+        "status": final_status,
+        "confidence": blended,
+        "ml_prediction": ml_label,
+        "features": result.features,
+        "issues": result.issues,
+    })
 
 
 # ─── Simple API Endpoints ─────────────────────────────────────────────────────

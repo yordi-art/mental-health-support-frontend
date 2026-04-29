@@ -41,8 +41,8 @@ class TherapistController {
         therapistData.license.licenseDocument = req.file.originalname;
       }
 
-      const { therapist, ocrDetails } = await TherapistVerificationService.registerTherapist(
-        user._id, therapistData, fileBuffer, fileMimetype
+      const { therapist, aiDetails } = await TherapistVerificationService.registerTherapist(
+        user._id, therapistData, fileBuffer, fileMimetype, req.file?.originalname || null
       );
 
       const jwt = require('jsonwebtoken');
@@ -55,7 +55,7 @@ class TherapistController {
         verification: {
           status: therapist.verification.status,
           notes: therapist.verification.notes,
-          ocrDetails,
+          aiDetails,
         },
       });
     } catch (error) {
@@ -87,15 +87,15 @@ class TherapistController {
         licenseDocument: req.file.originalname,
       };
 
-      const { therapist, ocrDetails } = await TherapistVerificationService.reuploadLicense(
-        req.user._id, licenseData, req.file.buffer, req.file.mimetype
+      const { therapist, aiDetails } = await TherapistVerificationService.reuploadLicense(
+        req.user._id, licenseData, req.file.buffer, req.file.mimetype, req.file.originalname
       );
 
       const details = TherapistVerificationService.getVerificationDetails(therapist);
 
       res.json({
         message: 'License re-uploaded and re-verification completed',
-        verification: { ...details, ocrDetails },
+        verification: { ...details, aiDetails },
       });
     } catch (error) {
       console.error('[reuploadLicense]', error);
