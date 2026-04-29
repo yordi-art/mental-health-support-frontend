@@ -65,6 +65,37 @@ class TherapistController {
   }
 
   /**
+   * POST /api/therapist/re-verify
+   * Re-runs verification on existing saved data (no new upload needed).
+   * Used when therapist is stuck at PENDING after a previous fix.
+   */
+  static async reVerify(req, res) {
+    try {
+      const therapist = await Therapist.findOne({ userId: req.user._id });
+      if (!therapist) return res.status(404).json({ message: 'Therapist profile not found' });
+
+      const result = await TherapistVerificationService.verifyTherapist(
+        therapist, null, null, null
+      );
+
+      therapist.verification = {
+        status:     result.status,
+        notes:      result.notes,
+        verifiedAt: result.verifiedAt,
+        confidence: result.aiDetails?.confidence ? Math.round(result.aiDetails.confidence * 100) : null,
+      };
+      await therapist.save();
+
+      res.json({
+        message: 'Re-verification complete',
+        verification: TherapistVerificationService.getVerificationDetails(therapist),
+      });
+    } catch (error) {
+      res.status(500).json({ message: 'Re-verification failed', error: error.message });
+    }
+  }
+
+  /**
    * POST /api/therapist/reupload-license
    * Accepts multipart/form-data
    */

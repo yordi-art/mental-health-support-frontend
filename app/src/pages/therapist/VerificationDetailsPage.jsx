@@ -1,17 +1,20 @@
 import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
-import { ShieldCheck, FileText, AlertTriangle, Upload, RefreshCw } from 'lucide-react';
+import { Link, useNavigate } from 'react-router-dom';
+import { ShieldCheck, FileText, AlertTriangle, Upload, RefreshCw, CheckCircle, Loader2 } from 'lucide-react';
 import DashboardLayout from '../../layouts/DashboardLayout';
-import VerificationStatusBanner, { VerificationBadge } from '../../components/therapist/VerificationStatusBanner';
+import VerificationStatusBanner from '../../components/therapist/VerificationStatusBanner';
 import { therapistSidebarItems } from '../../components/therapist/therapistNav';
 import { therapistAPI } from '../../api';
 import { useAuth } from '../../context/AuthContext';
 
 export default function VerificationDetailsPage() {
-  const { user, refetchVerification } = useAuth();
-  const [verification, setVerification] = useState(null);
+  const { user, setVerification } = useAuth();
+  const navigate = useNavigate();
+  const [verification, setVerificationData] = useState(null);
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [reverifying, setReverifying] = useState(false);
+  const [reverifyMsg, setReverifyMsg] = useState('');
 
   useEffect(() => {
     Promise.all([
@@ -19,7 +22,7 @@ export default function VerificationDetailsPage() {
       therapistAPI.getProfile(),
     ])
       .then(([vRes, pRes]) => {
-        setVerification(vRes.data.verification);
+        setVerificationData(vRes.data.verification);
         setProfile(pRes.data.therapist);
       })
       .catch(() => {})
@@ -36,8 +39,28 @@ export default function VerificationDetailsPage() {
     );
   }
 
+  const handleReVerify = async () => {
+    setReverifying(true);
+    setReverifyMsg('');
+    try {
+      const res = await therapistAPI.reVerify();
+      const newStatus = res.data.verification?.status || 'PENDING';
+      setVerificationData(res.data.verification);
+      setVerification(newStatus);          // update AuthContext
+      if (newStatus === 'VERIFIED') {
+        setTimeout(() => navigate('/therapist/dashboard'), 1200);
+      } else {
+        setReverifyMsg(`Status updated: ${newStatus}`);
+      }
+    } catch {
+      setReverifyMsg('Re-verification failed. Please try again.');
+    } finally {
+      setReverifying(false);
+    }
+  };
+
   const status = verification?.status || 'PENDING';
-  const canReupload = status === 'REJECTED' || status === 'EXPIRED';
+  const canReupload = status === 'REJECTED' || status === 'EXPIRED'; // kept for reference
 
   return (
     <DashboardLayout sidebarItems={therapistSidebarItems} userName={user.name || 'Dr. Sarah'}>
@@ -108,24 +131,33 @@ export default function VerificationDetailsPage() {
         )}
 
         {/* Actions */}
-        <div className="flex gap-3">
-          {canReupload && (
-            <Link
-              to="/therapist/reupload"
-              className="flex items-center gap-2 bg-primary text-white px-6 py-3 rounded-xl font-semibold hover:bg-blue-600 active:scale-95 transition"
-            >
+        <div className="flex flex-wrap gap-3">
+          {(status === 'REJECTED' || status === 'EXPIRED') && (
+            <Link to="/therapist/reupload"
+              className="flex items-center gap-2 bg-primary text-white px-6 py-3 rounded-xl font-semibold hover:bg-blue-600 transition">
               <Upload size={16} /> Re-upload Documents
             </Link>
           )}
           {status === 'PENDING' && (
-            <button
-              onClick={async () => { await refetchVerification(); window.location.reload(); }}
-              className="flex items-center gap-2 border border-gray-200 text-gray-600 px-5 py-3 rounded-xl hover:bg-gray-50 transition text-sm"
-            >
-              <RefreshCw size={15} /> Refresh Status
+            <button onClick={handleReVerify} disabled={reverifying}
+              className="flex items-center gap-2 bg-[#2CB1A1] text-white px-6 py-3 rounded-xl font-semibold hover:bg-[#239E8F] transition disabled:opacity-60">
+              {reverifying
+                ? <><Loader2 size={15} className="animate-spin" /> Verifying…</>
+                : <><CheckCircle size={15} /> Re-verify Now</>}
             </button>
           )}
+          {status === 'VERIFIED' && (
+            <Link to="/therapist/dashboard"
+              className="flex items-center gap-2 bg-[#2CB1A1] text-white px-6 py-3 rounded-xl font-semibold hover:bg-[#239E8F] transition">
+              <CheckCircle size={16} /> Go to Dashboard
+            </Link>
+          )}
         </div>
+        {reverifyMsg && (
+          <p className={`text-sm mt-3 font-medium ${reverifyMsg.includes('failed') ? 'text-red-500' : 'text-[#2CB1A1]'}`}>
+            {reverifyMsg}
+          </p>
+        )}
       </div>
     </DashboardLayout>
   );

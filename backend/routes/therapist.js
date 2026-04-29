@@ -91,6 +91,7 @@ router.put('/profile', TherapistController.updateProfile);
 // Verification
 router.get('/verification-status', TherapistController.getVerificationStatus);
 router.post('/reupload-license', upload.single('licenseDocument'), handleUploadError, TherapistController.reuploadLicense);
+router.post('/re-verify', TherapistController.reVerify);
 
 // Appointments (VERIFIED only)
 router.get('/appointments', verifiedTherapistOnly, TherapistController.getAppointments);
