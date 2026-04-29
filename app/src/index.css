@@ -1,8 +1,36 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
 
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 * { box-sizing: border-box; }
-body { font-family: 'Inter', sans-serif; background: #F8FAFC; color: #1E293B; }
+
+html { scroll-behavior: smooth; }
+
+body {
+  font-family: 'Inter', sans-serif;
+  background: #F0F4FA;
+  color: #1E293B;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Consistent input focus ring */
+@layer components {
+  .input {
+    @apply w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm
+           focus:outline-none focus:ring-2 focus:ring-primary/25 focus:border-primary/50
+           transition bg-white placeholder-gray-400;
+  }
+  .btn-primary {
+    @apply bg-primary text-white font-semibold rounded-xl px-5 py-2.5 text-sm
+           hover:bg-primary-dark active:scale-[0.98] transition-all disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+  .btn-outline {
+    @apply border border-gray-200 text-gray-600 font-medium rounded-xl px-5 py-2.5 text-sm
+           hover:bg-gray-50 active:scale-[0.98] transition-all;
+  }
+  .card {
+    @apply bg-white rounded-2xl border border-gray-100 shadow-card;
+  }
+}

@@ -72,18 +72,18 @@ export default function ClientDashboard() {
 
   if (loading) {
     return (
-      <DashboardLayout sidebarItems={clientSidebarItems} userName={name}>
-        <div className="flex items-center justify-center h-64">
-          <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin" />
-        </div>
-      </DashboardLayout>
-    );
+    <DashboardLayout sidebarItems={clientSidebarItems} userName={name}>
+      <div className="flex items-center justify-center h-64">
+        <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin" />
+      </div>
+    </DashboardLayout>
+  );
   }
 
   return (
     <DashboardLayout sidebarItems={clientSidebarItems} userName={name}>
       {/* Welcome Hero */}
-      <div className="bg-gradient-to-r from-primary to-blue-400 rounded-2xl p-6 text-white mb-6">
+      <div className="bg-brand-gradient rounded-2xl p-6 text-white mb-6">
         <p className="text-blue-100 text-sm mb-1">{greeting} 👋</p>
         <h1 className="text-2xl font-bold mb-1">{name}</h1>
         <p className="text-blue-100 text-sm mb-4">How are you feeling today? Your wellness journey continues here.</p>

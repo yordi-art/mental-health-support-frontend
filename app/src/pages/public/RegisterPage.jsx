@@ -47,7 +47,7 @@ export default function RegisterPage() {
   const inputCls = 'w-full border border-white/30 bg-white/20 backdrop-blur-sm rounded-xl px-4 py-3 text-sm text-white placeholder-white/60 focus:outline-none focus:ring-2 focus:ring-white/50 focus:border-white/60 transition';
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-primary via-blue-500 to-teal flex items-center justify-center px-4 py-10">
+    <div className="min-h-screen bg-brand-gradient flex items-center justify-center px-4 py-10 relative overflow-hidden">
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
         <div className="absolute -top-40 -right-40 w-80 h-80 bg-white/5 rounded-full" />
         <div className="absolute -bottom-40 -left-40 w-96 h-96 bg-white/5 rounded-full" />

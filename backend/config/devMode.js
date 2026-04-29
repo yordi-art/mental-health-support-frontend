@@ -1,15 +1,12 @@
 /**
  * DEV_MODE Configuration
- * Verification bypass is enabled only for development/testing and must be disabled in production.
  *
- * When DEV_MODE = true:
- *   - Therapist verificationStatus is automatically set to "VERIFIED"
- *   - All license/education/OCR checks are skipped
- *   - Therapists can register, login, access dashboard, and appear in therapist list
+ * When DEV_MODE = true  → verification is bypassed, all therapists auto-VERIFIED (testing only)
+ * When DEV_MODE = false → full AI verification pipeline runs (production)
  *
- * Set DEV_MODE = false (or DEV_MODE env var to 'false') to restore full verification pipeline.
+ * Controlled via DEV_MODE environment variable in backend/.env
  */
 
-const DEV_MODE = process.env.DEV_MODE !== 'false'; // TEMPORARY — set DEV_MODE=false in production
+const DEV_MODE = process.env.DEV_MODE === 'true'; // default FALSE — real verification runs
 
 module.exports = { DEV_MODE };

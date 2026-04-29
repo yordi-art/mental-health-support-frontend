@@ -168,8 +168,26 @@ export default function FindTherapistPage() {
 
       {/* Results */}
       {loading ? (
-        <div className="flex items-center justify-center h-48">
-          <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin" />
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <div key={i} className="bg-white rounded-2xl border border-gray-100 p-5 animate-pulse">
+              <div className="flex items-center gap-3 mb-3">
+                <div className="w-12 h-12 rounded-full bg-gray-100 flex-shrink-0" />
+                <div className="flex-1 space-y-2">
+                  <div className="h-3 bg-gray-100 rounded-full w-3/4" />
+                  <div className="h-2.5 bg-gray-100 rounded-full w-1/2" />
+                </div>
+              </div>
+              <div className="space-y-2 mb-4">
+                <div className="h-2.5 bg-gray-100 rounded-full" />
+                <div className="h-2.5 bg-gray-100 rounded-full w-5/6" />
+              </div>
+              <div className="flex gap-2">
+                <div className="flex-1 h-8 bg-gray-100 rounded-xl" />
+                <div className="flex-1 h-8 bg-gray-100 rounded-xl" />
+              </div>
+            </div>
+          ))}
         </div>
       ) : therapists.length === 0 ? (
         <div className="text-center py-16 text-gray-400">
